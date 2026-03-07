@@ -20,6 +20,9 @@ where = ["src"]
 
 [tool.basedpyright]
 include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
 executionEnvironments = [
-  { root = ".", extraPaths = ["src"] },
+  { root = "tests", extraPaths = ["src"] },
+  { root = "src" }
 ]
