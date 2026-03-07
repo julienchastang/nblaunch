@@ -17,3 +17,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+executionEnvironments = [
+  { root = ".", extraPaths = ["src"] },
+]
