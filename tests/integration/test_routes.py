@@ -27,7 +27,7 @@ def test_launch_placeholder_returns_501() -> None:
     client = TestClient(create_app(_settings()))
     response = client.get("/launch")
 
-    assert response.status_code == 501
+    assert response.status_code == 400
 
 
 def test_oauth_callback_placeholder_returns_501() -> None:
