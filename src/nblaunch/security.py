@@ -17,6 +17,9 @@ _SIGNATURE_RE = re.compile(r"^[a-f0-9]{64}$")
 class ValidationError(ValueError):
     """Raised when launch-request validation fails."""
 
+    kind: str
+    message: str
+
     def __init__(self, kind: str, message: str):
         super().__init__(message)
         self.kind = kind

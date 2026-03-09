@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 
+from .config import Settings
 from .security import ValidationError, validate_launch_request
 
 
@@ -21,11 +24,11 @@ def _error_status_for(kind: str) -> int:
 
 
 async def launch(request: Request) -> Response:
-    settings = request.app.state.settings
+    settings = cast(Settings, request.app.state.settings)
     query = request.query_params
 
     try:
-        validate_launch_request(
+        _ = validate_launch_request(
             nb=query.get("nb"),
             ts=query.get("ts"),
             sig=query.get("sig"),

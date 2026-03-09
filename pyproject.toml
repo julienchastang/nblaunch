@@ -22,6 +22,8 @@ where = ["src"]
 include = ["src", "tests"]
 venvPath = "."
 venv = ".venv"
+reportMissingTypeStubs = "none"
+reportUnusedCallResult = "none"
 executionEnvironments = [
   { root = "tests", extraPaths = ["src"] },
   { root = "src" }
