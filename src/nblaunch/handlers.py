@@ -15,10 +15,9 @@ from .nbgallery import (
     GalleryTimeoutError,
     GalleryTooLargeError,
     GalleryUpstreamError,
-    fetch_notebook,
 )
 from .security import ValidationError, validate_launch_request
-from .storage import StorageError, StoredNotebook, write_notebook
+from .storage import StorageError, StoredNotebook
 
 
 class NotebookFetcher(Protocol):
@@ -43,6 +42,14 @@ class UserRootResolver(Protocol):
         ...
 
 
+class AppState(Protocol):
+    settings: Settings
+    resolve_user_root: UserRootResolver | None
+    gallery_base_url: str
+    fetch_notebook: NotebookFetcher
+    write_notebook: NotebookWriter
+
+
 async def healthz() -> dict[str, bool]:
     return {"ok": True}
 
@@ -62,8 +69,12 @@ def _error_response(http_status: int, code: str, message: str) -> JSONResponse:
     )
 
 
+def _app_state(request: Request) -> AppState:
+    return cast(AppState, request.app.state)
+
+
 def _resolve_user_root(request: Request, settings: Settings) -> Path:
-    resolver = cast("UserRootResolver | None", getattr(request.app.state, "resolve_user_root", None))
+    resolver = _app_state(request).resolve_user_root
     if resolver is not None:
         return Path(resolver(request))
 
@@ -81,7 +92,8 @@ def _redirect_location(base_url: str, relative_notebook_path: str) -> str:
 
 
 async def launch(request: Request) -> Response:
-    settings = cast(Settings, request.app.state.settings)
+    state = _app_state(request)
+    settings = state.settings
     query = request.query_params
 
     try:
@@ -95,9 +107,9 @@ async def launch(request: Request) -> Response:
     except ValidationError as exc:
         return _error_response(_error_status_for(exc.kind), exc.kind, exc.message)
 
-    gallery_base_url = cast(str, getattr(request.app.state, "gallery_base_url", "http://127.0.0.1:9"))
-    fetcher = cast(NotebookFetcher, getattr(request.app.state, "fetch_notebook", fetch_notebook))
-    writer = cast(NotebookWriter, getattr(request.app.state, "write_notebook", write_notebook))
+    gallery_base_url = state.gallery_base_url
+    fetcher = state.fetch_notebook
+    writer = state.write_notebook
 
     try:
         payload = fetcher(
