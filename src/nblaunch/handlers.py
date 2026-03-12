@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Protocol, cast
 from pathlib import Path
+from typing import Protocol, cast
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
@@ -42,12 +42,24 @@ class UserRootResolver(Protocol):
         ...
 
 
+class ServiceAuth(Protocol):
+    def current_user(self, request: Request) -> str | None:
+        ...
+
+    def login_redirect(self, request: Request) -> Response:
+        ...
+
+    async def oauth_callback(self, request: Request) -> Response:
+        ...
+
+
 class AppState(Protocol):
     settings: Settings
     resolve_user_root: UserRootResolver | None
     gallery_base_url: str
     fetch_notebook: NotebookFetcher
     write_notebook: NotebookWriter
+    service_auth: ServiceAuth
 
 
 async def healthz() -> dict[str, bool]:
@@ -93,6 +105,9 @@ def _redirect_location(base_url: str, relative_notebook_path: str) -> str:
 
 async def launch(request: Request) -> Response:
     state = _app_state(request)
+    if state.service_auth.current_user(request) is None:
+        return state.service_auth.login_redirect(request)
+
     settings = state.settings
     query = request.query_params
 
@@ -139,5 +154,5 @@ async def launch(request: Request) -> Response:
     )
 
 
-async def oauth_callback_placeholder() -> Response:
-    return Response(status_code=status.HTTP_501_NOT_IMPLEMENTED)
+async def oauth_callback_placeholder(request: Request) -> Response:
+    return await _app_state(request).service_auth.oauth_callback(request)

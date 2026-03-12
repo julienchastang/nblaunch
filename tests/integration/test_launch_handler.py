@@ -4,6 +4,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from nblaunch.app import create_app
@@ -34,6 +35,21 @@ def _settings(tmp_path: Path) -> Settings:
     )
 
 
+class _AuthenticatedServiceAuth:
+    def current_user(self, _request: object) -> str | None:
+        return "test-user"
+
+    def login_redirect(self, _request: object) -> object:
+        raise AssertionError("login_redirect should not be called in authenticated tests")
+
+    async def oauth_callback(self, _request: object) -> object:
+        raise AssertionError("oauth_callback should not be called in authenticated tests")
+
+
+def _install_authenticated_user(app: FastAPI) -> None:
+    app.state.service_auth = _AuthenticatedServiceAuth()
+
+
 def _valid_query(nb: str = "gallery/notebook", ts: int | None = None) -> dict[str, str]:
     ts_value = int(time.time()) if ts is None else ts
     return {
@@ -45,6 +61,7 @@ def _valid_query(nb: str = "gallery/notebook", ts: int | None = None) -> dict[st
 
 def test_launch_happy_path_fetches_stores_and_redirects(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
+    _install_authenticated_user(app)
     sample_bytes = (FIXTURES / "sample_notebook.ipynb").read_bytes()
 
     def _fake_fetch(**_: object) -> NotebookPayload:
@@ -67,7 +84,9 @@ def test_launch_happy_path_fetches_stores_and_redirects(tmp_path: Path) -> None:
 
 
 def test_launch_missing_params_returns_400() -> None:
-    client = TestClient(create_app(_settings(Path("/tmp/not-used"))))
+    app = create_app(_settings(Path("/tmp/not-used")))
+    _install_authenticated_user(app)
+    client = TestClient(app)
     response = client.get("/launch", params={"nb": "gallery/notebook"})
 
     assert response.status_code == 400
@@ -75,7 +94,9 @@ def test_launch_missing_params_returns_400() -> None:
 
 
 def test_launch_invalid_notebook_id_returns_400() -> None:
-    client = TestClient(create_app(_settings(Path("/tmp/not-used"))))
+    app = create_app(_settings(Path("/tmp/not-used")))
+    _install_authenticated_user(app)
+    client = TestClient(app)
     response = client.get("/launch", params=_valid_query(nb="../escape"))
 
     assert response.status_code == 400
@@ -83,7 +104,9 @@ def test_launch_invalid_notebook_id_returns_400() -> None:
 
 
 def test_launch_invalid_timestamp_returns_400() -> None:
-    client = TestClient(create_app(_settings(Path("/tmp/not-used"))))
+    app = create_app(_settings(Path("/tmp/not-used")))
+    _install_authenticated_user(app)
+    client = TestClient(app)
     response = client.get(
         "/launch",
         params={"nb": "gallery/notebook", "ts": "not-a-number", "sig": "a" * 64},
@@ -94,7 +117,9 @@ def test_launch_invalid_timestamp_returns_400() -> None:
 
 
 def test_launch_expired_timestamp_returns_401() -> None:
-    client = TestClient(create_app(_settings(Path("/tmp/not-used"))))
+    app = create_app(_settings(Path("/tmp/not-used")))
+    _install_authenticated_user(app)
+    client = TestClient(app)
     response = client.get("/launch", params=_valid_query(ts=int(time.time()) - 301))
 
     assert response.status_code == 401
@@ -102,7 +127,9 @@ def test_launch_expired_timestamp_returns_401() -> None:
 
 
 def test_launch_invalid_signature_returns_401() -> None:
-    client = TestClient(create_app(_settings(Path("/tmp/not-used"))))
+    app = create_app(_settings(Path("/tmp/not-used")))
+    _install_authenticated_user(app)
+    client = TestClient(app)
     params = _valid_query()
     params["sig"] = "0" * 64
     response = client.get("/launch", params=params)
@@ -113,6 +140,7 @@ def test_launch_invalid_signature_returns_401() -> None:
 
 def test_launch_oversized_payload_returns_413_and_does_not_write(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
+    _install_authenticated_user(app)
     write_calls = {"count": 0}
 
     def _fake_fetch(**_: object) -> NotebookPayload:
@@ -136,6 +164,7 @@ def test_launch_oversized_payload_returns_413_and_does_not_write(tmp_path: Path)
 
 def test_launch_fetch_failure_returns_502_and_does_not_write(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
+    _install_authenticated_user(app)
     write_calls = {"count": 0}
 
     def _fake_fetch(**_: object) -> NotebookPayload:
@@ -159,6 +188,7 @@ def test_launch_fetch_failure_returns_502_and_does_not_write(tmp_path: Path) -> 
 
 def test_launch_storage_failure_returns_500_and_no_redirect(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
+    _install_authenticated_user(app)
 
     def _fake_fetch(**_: object) -> NotebookPayload:
         return NotebookPayload(

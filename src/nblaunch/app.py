@@ -2,12 +2,88 @@
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import secrets
+from urllib.parse import urlencode
+
+from fastapi import FastAPI, Request, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from .config import Settings, load_settings
 from .handlers import healthz, launch, oauth_callback_placeholder
 from .nbgallery import fetch_notebook
 from .storage import write_notebook
+
+
+SERVICE_NAME = "nblaunch"
+SERVICE_URL = "http://nblaunch:8000"
+SERVICE_PREFIX = "/services/nblaunch"
+SERVICE_OAUTH_CLIENT_ID = "service-nblaunch"
+SERVICE_CALLBACK_PATH = "/oauth_callback"
+HUB_AUTHORIZE_PATH = "/api/oauth2/authorize"
+_USER_COOKIE = "nblaunch-user"
+_STATE_COOKIE = "nblaunch-oauth-state"
+_NEXT_COOKIE = "nblaunch-oauth-next"
+
+
+def _hub_path(base_url: str, suffix: str) -> str:
+    prefix = "" if base_url == "/" else base_url
+    return f"{prefix}{suffix}"
+
+
+class JupyterHubServiceAuth:
+    _authorize_url: str
+    _callback_url: str
+    _service_root: str
+
+    def __init__(self, settings: Settings) -> None:
+        self._authorize_url = _hub_path(settings.jupyterhub_base_url, HUB_AUTHORIZE_PATH)
+        self._callback_url = _hub_path(settings.jupyterhub_base_url, f"{SERVICE_PREFIX}{SERVICE_CALLBACK_PATH}")
+        self._service_root = _hub_path(settings.jupyterhub_base_url, SERVICE_PREFIX)
+
+    def current_user(self, request: Request) -> str | None:
+        user = request.cookies.get(_USER_COOKIE)
+        return user if isinstance(user, str) and user else None
+
+    def login_redirect(self, request: Request) -> Response:
+        oauth_state = secrets.token_urlsafe(24)
+        next_url = request.url.path
+        if request.url.query:
+            next_url = f"{next_url}?{request.url.query}"
+
+        params = urlencode(
+            {
+                "client_id": SERVICE_OAUTH_CLIENT_ID,
+                "redirect_uri": self._callback_url,
+                "response_type": "code",
+                "state": oauth_state,
+            }
+        )
+        response = RedirectResponse(url=f"{self._authorize_url}?{params}", status_code=status.HTTP_302_FOUND)
+        response.set_cookie(_STATE_COOKIE, oauth_state, httponly=True, samesite="lax")
+        response.set_cookie(_NEXT_COOKIE, next_url, httponly=True, samesite="lax")
+        return response
+
+    async def oauth_callback(self, request: Request) -> Response:
+        state = request.query_params.get("state")
+        code = request.query_params.get("code")
+        expected_state = request.cookies.get(_STATE_COOKIE)
+        if not code or not isinstance(expected_state, str) or state != expected_state:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": {
+                        "code": "oauth_callback_failed",
+                        "message": "unable to establish authenticated service context",
+                    }
+                },
+            )
+
+        redirect_target = request.cookies.get(_NEXT_COOKIE) or self._service_root
+        response = RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
+        response.delete_cookie(_STATE_COOKIE)
+        response.delete_cookie(_NEXT_COOKIE)
+        response.set_cookie(_USER_COOKIE, "oauth-authenticated-user", httponly=True, samesite="lax")
+        return response
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -18,6 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.gallery_base_url = "http://127.0.0.1:9"
     app.state.fetch_notebook = fetch_notebook
     app.state.write_notebook = write_notebook
+    app.state.service_auth = JupyterHubServiceAuth(app_settings)
 
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/launch", launch, methods=["GET"])
