@@ -1,5 +1,7 @@
 from __future__ import annotations
+# pyright: reportMissingTypeStubs=false
 
+from email.message import Message
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 
@@ -18,6 +20,9 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 class FakeResponse:
+    _body: bytes
+    _offset: int
+
     def __init__(self, body: bytes, content_type: str = "application/json", content_length: int | None = None):
         self._body = body
         self._offset = 0
@@ -63,10 +68,11 @@ def test_fetch_notebook_rejects_html_content_type() -> None:
     body = (FIXTURES / "bad_html_response.html").read_bytes()
 
     def _opener(url: str, timeout: int) -> FakeResponse:
+        _ = (url, timeout)
         return FakeResponse(body, content_type="text/html")
 
     with pytest.raises(GalleryContentTypeError, match="text/html"):
-        fetch_notebook(
+        _ = fetch_notebook(
             base_url="https://gallery.example",
             notebook_id="gallery/notebook.ipynb",
             timeout_seconds=3,
@@ -79,10 +85,11 @@ def test_fetch_notebook_rejects_oversized_header() -> None:
     body = (FIXTURES / "sample_notebook.ipynb").read_bytes()
 
     def _opener(url: str, timeout: int) -> FakeResponse:
+        _ = (url, timeout)
         return FakeResponse(body, content_length=(1024 * 1024))
 
     with pytest.raises(GalleryTooLargeError, match="exceeds max size"):
-        fetch_notebook(
+        _ = fetch_notebook(
             base_url="https://gallery.example",
             notebook_id="gallery/notebook.ipynb",
             timeout_seconds=3,
@@ -96,10 +103,11 @@ def test_fetch_notebook_rejects_oversized_payload() -> None:
     body = b"x" * 2048
 
     def _opener(url: str, timeout: int) -> FakeResponse:
+        _ = (url, timeout)
         return FakeResponse(body)
 
     with pytest.raises(GalleryTooLargeError, match="exceeds max size"):
-        fetch_notebook(
+        _ = fetch_notebook(
             base_url="https://gallery.example",
             notebook_id="gallery/notebook.ipynb",
             timeout_seconds=3,
@@ -110,10 +118,11 @@ def test_fetch_notebook_rejects_oversized_payload() -> None:
 
 def test_fetch_notebook_maps_timeout() -> None:
     def _opener(url: str, timeout: int) -> FakeResponse:
+        _ = (url, timeout)
         raise URLError("timed out")
 
     with pytest.raises(GalleryTimeoutError):
-        fetch_notebook(
+        _ = fetch_notebook(
             base_url="https://gallery.example",
             notebook_id="gallery/notebook.ipynb",
             timeout_seconds=3,
@@ -124,10 +133,11 @@ def test_fetch_notebook_maps_timeout() -> None:
 
 def test_fetch_notebook_maps_http_error() -> None:
     def _opener(url: str, timeout: int) -> FakeResponse:
-        raise HTTPError(url=url, code=502, msg="bad gateway", hdrs=None, fp=None)
+        _ = timeout
+        raise HTTPError(url=url, code=502, msg="bad gateway", hdrs=Message(), fp=None)
 
     with pytest.raises(GalleryUpstreamError, match="HTTP 502"):
-        fetch_notebook(
+        _ = fetch_notebook(
             base_url="https://gallery.example",
             notebook_id="gallery/notebook.ipynb",
             timeout_seconds=3,

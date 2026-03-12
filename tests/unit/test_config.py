@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingTypeStubs=false
 
 import pytest
 
@@ -30,7 +31,7 @@ def test_load_settings_missing_required_raises() -> None:
     del env["NBLAUNCH_HMAC_SECRET"]
 
     with pytest.raises(ConfigError, match="missing required setting"):
-        load_settings(env)
+        _ = load_settings(env)
 
 
 def test_load_settings_invalid_integer_raises() -> None:
@@ -38,7 +39,7 @@ def test_load_settings_invalid_integer_raises() -> None:
     env["NBLAUNCH_SIGNATURE_TTL_SECONDS"] = "nope"
 
     with pytest.raises(ConfigError, match="invalid integer"):
-        load_settings(env)
+        _ = load_settings(env)
 
 
 def test_load_settings_requires_absolute_notebook_path() -> None:
@@ -46,7 +47,7 @@ def test_load_settings_requires_absolute_notebook_path() -> None:
     env["NBLAUNCH_NOTEBOOK_BASE_DIR"] = "relative/path"
 
     with pytest.raises(ConfigError, match="absolute path"):
-        load_settings(env)
+        _ = load_settings(env)
 
 
 def test_load_settings_requires_absolute_hub_api_url() -> None:
@@ -54,4 +55,4 @@ def test_load_settings_requires_absolute_hub_api_url() -> None:
     env["NBLAUNCH_HUB_API_URL"] = "not-a-url"
 
     with pytest.raises(ConfigError, match="absolute http"):
-        load_settings(env)
+        _ = load_settings(env)

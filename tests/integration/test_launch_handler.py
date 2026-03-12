@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pyright: reportMissingTypeStubs=false
 
 import time
 from pathlib import Path
@@ -13,6 +14,13 @@ from nblaunch.storage import StorageError
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+
+
+def _resolver_for(path: Path):
+    def _resolver(_request: object) -> Path:
+        return path
+
+    return _resolver
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -47,7 +55,7 @@ def test_launch_happy_path_fetches_stores_and_redirects(tmp_path: Path) -> None:
         )
 
     app.state.fetch_notebook = _fake_fetch
-    app.state.resolve_user_root = lambda request: tmp_path / "user-a"
+    app.state.resolve_user_root = _resolver_for(tmp_path / "user-a")
     client = TestClient(app)
 
     response = client.get("/launch", params=_valid_query(), follow_redirects=False)
@@ -116,7 +124,7 @@ def test_launch_oversized_payload_returns_413_and_does_not_write(tmp_path: Path)
 
     app.state.fetch_notebook = _fake_fetch
     app.state.write_notebook = _fake_write
-    app.state.resolve_user_root = lambda request: tmp_path / "user-b"
+    app.state.resolve_user_root = _resolver_for(tmp_path / "user-b")
     client = TestClient(app)
 
     response = client.get("/launch", params=_valid_query())
@@ -139,7 +147,7 @@ def test_launch_fetch_failure_returns_502_and_does_not_write(tmp_path: Path) -> 
 
     app.state.fetch_notebook = _fake_fetch
     app.state.write_notebook = _fake_write
-    app.state.resolve_user_root = lambda request: tmp_path / "user-c"
+    app.state.resolve_user_root = _resolver_for(tmp_path / "user-c")
     client = TestClient(app)
 
     response = client.get("/launch", params=_valid_query())
@@ -164,7 +172,7 @@ def test_launch_storage_failure_returns_500_and_no_redirect(tmp_path: Path) -> N
 
     app.state.fetch_notebook = _fake_fetch
     app.state.write_notebook = _fake_write
-    app.state.resolve_user_root = lambda request: tmp_path / "user-d"
+    app.state.resolve_user_root = _resolver_for(tmp_path / "user-d")
     client = TestClient(app)
 
     response = client.get("/launch", params=_valid_query())

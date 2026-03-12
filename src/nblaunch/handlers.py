@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Protocol, cast
+from typing import Protocol, cast
 from pathlib import Path
 
 from fastapi import Request, Response, status
@@ -63,7 +63,7 @@ def _error_response(http_status: int, code: str, message: str) -> JSONResponse:
 
 
 def _resolve_user_root(request: Request, settings: Settings) -> Path:
-    resolver = cast(Optional[UserRootResolver], getattr(request.app.state, "resolve_user_root", None))
+    resolver = cast("UserRootResolver | None", getattr(request.app.state, "resolve_user_root", None))
     if resolver is not None:
         return Path(resolver(request))
 
@@ -113,13 +113,10 @@ async def launch(request: Request) -> Response:
 
     user_root = _resolve_user_root(request, settings)
     try:
-        stored = cast(
-            StoredNotebook,
-            writer(
-                user_root=user_root,
-                notebook_id=validated.notebook_id,
-                notebook_bytes=payload.content,
-            ),
+        stored = writer(
+            user_root=user_root,
+            notebook_id=validated.notebook_id,
+            notebook_bytes=payload.content,
         )
     except StorageError as exc:
         return _error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "storage_write_failed", str(exc))

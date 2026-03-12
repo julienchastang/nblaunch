@@ -24,6 +24,7 @@ venvPath = "."
 venv = ".venv"
 reportMissingTypeStubs = "none"
 reportUnusedCallResult = "none"
+reportAny = "none"
 executionEnvironments = [
   { root = "tests", extraPaths = ["src"] },
   { root = "src" }
