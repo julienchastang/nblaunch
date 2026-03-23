@@ -32,6 +32,19 @@ class HubApiFetcher(Protocol):
         ...
 
 
+class _ResponseReader(Protocol):
+    def read(self) -> bytes:
+        ...
+
+
+class _UrlOpenResponse(Protocol):
+    def __enter__(self) -> _ResponseReader:
+        ...
+
+    def __exit__(self, exc_type: object, exc: object, tb: object) -> object:
+        ...
+
+
 def _home_subpath_url(hub_api_url: str, username: str) -> str:
     return f"{hub_api_url.rstrip('/')}{NBLAUNCH_HOME_SUBPATH_API_PATH}/{quote(username, safe='')}"
 
@@ -45,7 +58,8 @@ def _default_fetch_json(*, url: str, token: str, timeout_seconds: int) -> object
         },
     )
     try:
-        with urlopen(request, timeout=timeout_seconds) as response:
+        response_context = cast(_UrlOpenResponse, urlopen(request, timeout=timeout_seconds))
+        with response_context as response:
             payload = response.read().decode("utf-8")
     except HTTPError as exc:
         if exc.code == 404:
@@ -57,7 +71,7 @@ def _default_fetch_json(*, url: str, token: str, timeout_seconds: int) -> object
         raise HubApiError("failed to reach Hub API") from exc
 
     try:
-        return loads(payload)
+        return cast(object, loads(payload))
     except JSONDecodeError as exc:
         raise HubApiError("Hub API returned invalid JSON") from exc
 
