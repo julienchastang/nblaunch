@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from nblaunch.storage import StorageError, write_notebook
+from nblaunch.storage import StorageError, resolve_user_root_from_home_subpath, write_notebook
 
 
 def test_write_notebook_writes_under_expected_path(tmp_path: Path) -> None:
@@ -41,3 +41,20 @@ def test_write_notebook_is_atomic_and_replaces_existing(tmp_path: Path) -> None:
 
     assert stored.absolute_path == existing
     assert existing.read_bytes() == b"new"
+
+
+def test_resolve_user_root_from_home_subpath_joins_under_base_dir(tmp_path: Path) -> None:
+    resolved = resolve_user_root_from_home_subpath(
+        base_dir=tmp_path,
+        home_subpath="users/test-user",
+    )
+
+    assert resolved == tmp_path / "users" / "test-user"
+
+
+def test_resolve_user_root_from_home_subpath_rejects_traversal() -> None:
+    with pytest.raises(StorageError, match="traversal|relative"):
+        _ = resolve_user_root_from_home_subpath(
+            base_dir=Path("/tmp/notebooks"),
+            home_subpath="../escape",
+        )

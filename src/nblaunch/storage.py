@@ -18,6 +18,27 @@ class StoredNotebook:
     relative_path: str
 
 
+def _safe_home_subpath(home_subpath: str) -> Path:
+    raw = home_subpath.strip()
+    if not raw:
+        raise StorageError("home subpath must not be empty")
+
+    target = Path(raw)
+    if target.is_absolute():
+        raise StorageError("home subpath must be relative")
+
+    normalized = Path(os.path.normpath(raw))
+    if str(normalized) in {"", "."}:
+        raise StorageError("home subpath must not be empty")
+    if any(part in {"..", ""} for part in normalized.parts):
+        raise StorageError("home subpath contains traversal")
+    return normalized
+
+
+def resolve_user_root_from_home_subpath(*, base_dir: Path, home_subpath: str) -> Path:
+    return base_dir / _safe_home_subpath(home_subpath)
+
+
 def _safe_notebook_relative_path(notebook_id: str) -> Path:
     target = Path("nbgallery") / f"{notebook_id}.ipynb"
     if target.is_absolute():

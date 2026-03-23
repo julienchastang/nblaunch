@@ -9,6 +9,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 
 from .config import Settings
+from .hubapi import HomeSubpathNotFoundError, HubApiError
 from .nbgallery import (
     GalleryContentTypeError,
     NotebookPayload,
@@ -38,7 +39,7 @@ class NotebookWriter(Protocol):
 
 
 class UserRootResolver(Protocol):
-    def __call__(self, request: Request) -> Path | str:
+    def __call__(self, *, request: Request, username: str, settings: Settings) -> Path | str:
         ...
 
 
@@ -85,17 +86,11 @@ def _app_state(request: Request) -> AppState:
     return cast(AppState, request.app.state)
 
 
-def _resolve_user_root(request: Request, settings: Settings) -> Path:
+def _resolve_user_root(request: Request, settings: Settings, username: str) -> Path:
     resolver = _app_state(request).resolve_user_root
-    if resolver is not None:
-        return Path(resolver(request))
-
-    header_value = request.headers.get("X-NBLaunch-User-Root")
-    if header_value:
-        return Path(header_value)
-
-    # Provisional Stage 04 default prior to Hub user-home resolution wiring.
-    return Path(settings.notebook_base_dir) / "provisional-user"
+    if resolver is None:
+        raise HubApiError("user-root resolver is not configured")
+    return Path(resolver(request=request, username=username, settings=settings))
 
 
 def _redirect_location(base_url: str, relative_notebook_path: str) -> str:
@@ -105,7 +100,8 @@ def _redirect_location(base_url: str, relative_notebook_path: str) -> str:
 
 async def launch(request: Request) -> Response:
     state = _app_state(request)
-    if state.service_auth.current_user(request) is None:
+    username = state.service_auth.current_user(request)
+    if username is None:
         return state.service_auth.login_redirect(request)
 
     settings = state.settings
@@ -138,7 +134,13 @@ async def launch(request: Request) -> Response:
     except (GalleryTimeoutError, GalleryUpstreamError, GalleryContentTypeError) as exc:
         return _error_response(status.HTTP_502_BAD_GATEWAY, "gallery_fetch_failed", str(exc))
 
-    user_root = _resolve_user_root(request, settings)
+    try:
+        user_root = _resolve_user_root(request, settings, username)
+    except HomeSubpathNotFoundError as exc:
+        return _error_response(status.HTTP_404_NOT_FOUND, "missing_user_home_mapping", str(exc))
+    except HubApiError as exc:
+        return _error_response(status.HTTP_502_BAD_GATEWAY, "hub_home_lookup_failed", str(exc))
+
     try:
         stored = writer(
             user_root=user_root,

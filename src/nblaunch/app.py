@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import secrets
+from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .config import Settings, load_settings
+from .hubapi import resolve_user_root as resolve_hub_user_root
 from .handlers import healthz, launch, oauth_callback_placeholder
 from .nbgallery import fetch_notebook
 from .storage import write_notebook
@@ -89,8 +91,19 @@ class JupyterHubServiceAuth:
 def create_app(settings: Settings | None = None) -> FastAPI:
     app_settings = settings or load_settings()
     app = FastAPI(title="nblaunch")
+
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        return resolve_hub_user_root(
+            hub_api_url=settings.hub_api_url,
+            service_token=settings.service_token,
+            notebook_base_dir=settings.notebook_base_dir,
+            username=username,
+            timeout_seconds=settings.http_timeout_seconds,
+        )
+
     app.state.settings = app_settings
-    app.state.resolve_user_root = None
+    app.state.resolve_user_root = _resolve_user_root
     app.state.gallery_base_url = "http://127.0.0.1:9"
     app.state.fetch_notebook = fetch_notebook
     app.state.write_notebook = write_notebook

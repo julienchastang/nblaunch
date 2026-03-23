@@ -4,7 +4,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 from nblaunch.app import create_app
@@ -18,7 +18,10 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
 
 
 def _resolver_for(path: Path):
-    def _resolver(_request: object) -> Path:
+    def _resolver(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        _ = username
+        _ = settings
         return path
 
     return _resolver

@@ -61,7 +61,10 @@ def test_oauth_callback_roundtrip_restores_original_launch_request(tmp_path: Pat
 
     app.state.fetch_notebook = _fake_fetch
 
-    def _resolve_user_root(_request: Request) -> Path:
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        _ = username
+        _ = settings
         return tmp_path / "user-a"
 
     app.state.resolve_user_root = _resolve_user_root
