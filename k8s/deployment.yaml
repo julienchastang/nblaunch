@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nblaunch
+  labels:
+    app.kubernetes.io/name: nblaunch
+    app.kubernetes.io/component: service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: nblaunch
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: nblaunch
+        app.kubernetes.io/component: service
+    spec:
+      containers:
+        - name: nblaunch
+          image: nblaunch:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: NBLAUNCH_HMAC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: nblaunch-secrets
+                  key: hmac-secret
+            - name: NBLAUNCH_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: nblaunch-secrets
+                  key: service-token
+            - name: NBLAUNCH_HUB_API_URL
+              value: http://hub:8081/hub/api
+            - name: NBLAUNCH_NOTEBOOK_BASE_DIR
+              value: /srv/jupyterhub/users
+            - name: NBLAUNCH_JUPYTERHUB_BASE_URL
+              value: /hub
+            - name: NBLAUNCH_SIGNATURE_TTL_SECONDS
+              value: "300"
+            - name: NBLAUNCH_MAX_NOTEBOOK_BYTES
+              value: "10485760"
+            - name: NBLAUNCH_GALLERY_TIMEOUT_SECONDS
+              value: "10"
+            - name: NBLAUNCH_HTTP_TIMEOUT_SECONDS
+              value: "10"
+            - name: NBLAUNCH_LOG_LEVEL
+              value: INFO
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: user-home-root
+              mountPath: /srv/jupyterhub/users
+      volumes:
+        - name: user-home-root
+          persistentVolumeClaim:
+            claimName: jupyterhub-user-homes
