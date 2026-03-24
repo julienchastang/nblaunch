@@ -61,16 +61,16 @@ docker run --rm -p 8000:8000 \
 
 ## Kubernetes rollout
 
-Stage 07 deployment assets live under [k8s/](/workspace/services/nblaunch/k8s):
-- [deployment.yaml](/workspace/services/nblaunch/k8s/deployment.yaml)
-- [service.yaml](/workspace/services/nblaunch/k8s/service.yaml)
-- [secret.example.yaml](/workspace/services/nblaunch/k8s/secret.example.yaml)
+Stage 07 deployment assets live under `services/nblaunch/k8s/`:
+- `services/nblaunch/k8s/deployment.yaml`
+- `services/nblaunch/k8s/service.yaml`
+- `services/nblaunch/k8s/secret.example.yaml`
 
 Recommended rollout sequence:
 1. Build and publish the image tag you intend to deploy.
-2. Copy [secret.example.yaml](/workspace/services/nblaunch/k8s/secret.example.yaml) to your deployment system and replace placeholder values.
-3. Update [deployment.yaml](/workspace/services/nblaunch/k8s/deployment.yaml) with the real image tag and any cluster-specific PVC name.
-4. Apply the JupyterHub service config and extraConfig assets from `/workspace/jupyterhub`.
+2. Copy `services/nblaunch/k8s/secret.example.yaml` to your deployment system and replace placeholder values.
+3. Update `services/nblaunch/k8s/deployment.yaml` with the real image tag and any cluster-specific PVC name.
+4. Apply the JupyterHub service config and extraConfig assets from `jupyterhub/`.
 5. Apply the `nblaunch` Secret, Deployment, and Service.
 6. Wait for the Deployment to become ready before routing user traffic.
 
@@ -79,7 +79,7 @@ Verification after rollout:
 2. `kubectl rollout status deploy/nblaunch -n <namespace>`
 3. `kubectl logs deploy/nblaunch -n <namespace> --tail=100`
 4. Port-forward or curl `/healthz`.
-5. Generate a signed launch URL with [generate_nblaunch_url.sh](/workspace/services/nblaunch/scripts/generate_nblaunch_url.sh) and validate the expected redirect behavior in staging.
+5. Generate a signed launch URL with `services/nblaunch/scripts/generate_nblaunch_url.sh` and validate the expected redirect behavior in staging.
 
 Rollback:
 1. `kubectl rollout undo deploy/nblaunch -n <namespace>`
@@ -88,7 +88,7 @@ Rollback:
 
 ## Signed URL generation
 
-Use [generate_nblaunch_url.sh](/workspace/services/nblaunch/scripts/generate_nblaunch_url.sh) to generate a signed launch URL:
+Use `services/nblaunch/scripts/generate_nblaunch_url.sh` to generate a signed launch URL:
 
 ```bash
 NBLAUNCH_HMAC_SECRET=replace-me \
@@ -105,16 +105,16 @@ Always-on tests:
 
 ```bash
 pytest tests
-pytest /workspace/tests/smoke/test_nblaunch_config_render.py
+pytest tests/smoke/test_nblaunch_config_render.py
 ```
 
 Environment-dependent e2e validation:
 
 ```bash
-pytest /workspace/tests/e2e/test_nblaunch_open_in_hub.py
+pytest tests/e2e/test_nblaunch_open_in_hub.py
 ```
 
-E2E prerequisites are environment variables documented in [test_nblaunch_open_in_hub.py](/workspace/tests/e2e/test_nblaunch_open_in_hub.py). The test is skipped unless those inputs are present.
+E2E prerequisites are environment variables documented in `tests/e2e/test_nblaunch_open_in_hub.py`. The test is skipped unless those inputs are present.
 
 ## Troubleshooting
 
