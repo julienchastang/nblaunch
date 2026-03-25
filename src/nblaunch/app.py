@@ -43,8 +43,8 @@ class JupyterHubServiceAuth:
 
     def __init__(self, settings: Settings) -> None:
         self._authorize_url = _hub_path(settings.jupyterhub_base_url, HUB_AUTHORIZE_PATH)
-        self._callback_url = _hub_path(settings.jupyterhub_base_url, f"{SERVICE_PREFIX}{SERVICE_CALLBACK_PATH}")
-        self._service_root = _hub_path(settings.jupyterhub_base_url, SERVICE_PREFIX)
+        self._callback_url = f"{SERVICE_PREFIX}{SERVICE_CALLBACK_PATH}"
+        self._service_root = SERVICE_PREFIX
 
     def current_user(self, request: Request) -> str | None:
         user = request.cookies.get(_USER_COOKIE)
