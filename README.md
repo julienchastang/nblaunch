@@ -70,7 +70,7 @@ Recommended rollout sequence:
 1. Build and publish the image tag you intend to deploy.
 2. Copy `services/nblaunch/k8s/secret.example.yaml` to your deployment system and replace placeholder values.
 3. Update `services/nblaunch/k8s/deployment.yaml` with the real image tag and any cluster-specific PVC name.
-4. Apply the JupyterHub service config and extraConfig assets from `jupyterhub/`.
+4. Roll out the Hub-side configuration with `helm upgrade --install ... --values jupyterhub/values-nblaunch.yaml` and your existing secret values.
 5. Apply the `nblaunch` Secret, Deployment, and Service.
 6. Wait for the Deployment to become ready before routing user traffic.
 
