@@ -32,6 +32,10 @@ def _hub_path(base_url: str, suffix: str) -> str:
     return f"{prefix}{suffix}"
 
 
+async def service_root() -> dict[str, str]:
+    return {"service": SERVICE_NAME, "status": "ok"}
+
+
 class JupyterHubServiceAuth:
     _authorize_url: str
     _callback_url: str
@@ -109,8 +113,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.write_notebook = write_notebook
     app.state.service_auth = JupyterHubServiceAuth(app_settings)
 
+    app.add_api_route("/", service_root, methods=["GET"])
     app.add_api_route("/healthz", healthz, methods=["GET"])
     app.add_api_route("/launch", launch, methods=["GET"])
     app.add_api_route("/oauth_callback", oauth_callback_placeholder, methods=["GET"])
+    app.add_api_route(f"{SERVICE_PREFIX}/", service_root, methods=["GET"])
+    app.add_api_route(f"{SERVICE_PREFIX}/healthz", healthz, methods=["GET"])
+    app.add_api_route(f"{SERVICE_PREFIX}/launch", launch, methods=["GET"])
+    app.add_api_route(f"{SERVICE_PREFIX}/oauth_callback", oauth_callback_placeholder, methods=["GET"])
 
     return app

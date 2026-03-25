@@ -25,9 +25,41 @@ def test_healthz_returns_ok_payload() -> None:
     assert response.json() == {"ok": True}
 
 
+def test_prefixed_healthz_returns_ok_payload() -> None:
+    client = TestClient(create_app(_settings()))
+    response = client.get("/services/nblaunch/healthz")
+
+    assert response.status_code == 200
+    assert response.json() == {"ok": True}
+
+
+def test_prefixed_service_root_returns_ok_payload() -> None:
+    client = TestClient(create_app(_settings()))
+    response = client.get("/services/nblaunch/")
+
+    assert response.status_code == 200
+    assert response.json() == {"service": "nblaunch", "status": "ok"}
+
+
 def test_launch_requires_authentication() -> None:
     client = TestClient(create_app(_settings()))
     response = client.get("/launch", follow_redirects=False)
+
+    assert response.status_code == 302
+    location = response.headers["location"]
+    parsed = urlparse(location)
+    params = parse_qs(parsed.query)
+
+    assert parsed.path == "/api/oauth2/authorize"
+    assert params["client_id"] == ["service-nblaunch"]
+    assert params["redirect_uri"] == ["/services/nblaunch/oauth_callback"]
+    assert params["response_type"] == ["code"]
+    assert "state" in params
+
+
+def test_prefixed_launch_requires_authentication() -> None:
+    client = TestClient(create_app(_settings()))
+    response = client.get("/services/nblaunch/launch", follow_redirects=False)
 
     assert response.status_code == 302
     location = response.headers["location"]
