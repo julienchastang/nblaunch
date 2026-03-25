@@ -20,6 +20,7 @@ class Settings:
     hub_api_url: str
     gallery_base_url: str
     notebook_base_dir: str
+    gallery_download_path_template: str = "/api/notebooks/{notebook_id}"
     signature_ttl_seconds: int = 300
     max_notebook_bytes: int = 10 * 1024 * 1024
     gallery_timeout_seconds: int = 10
@@ -60,6 +61,17 @@ def _validate_gallery_base_url(gallery_base_url: str) -> None:
         raise ConfigError("NBLAUNCH_GALLERY_BASE_URL must be an absolute http(s) URL")
 
 
+def _normalize_gallery_download_path_template(value: str) -> str:
+    template = value.strip() or "/api/notebooks/{notebook_id}"
+    if not template.startswith("/"):
+        raise ConfigError("NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE must start with '/'")
+    if "{notebook_id}" not in template:
+        raise ConfigError(
+            "NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE must include '{notebook_id}'"
+        )
+    return template
+
+
 def _normalize_base_url(value: str) -> str:
     base = value.strip() or "/"
     if not base.startswith("/"):
@@ -90,6 +102,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         hub_api_url=hub_api_url,
         gallery_base_url=gallery_base_url,
         notebook_base_dir=notebook_base_dir,
+        gallery_download_path_template=_normalize_gallery_download_path_template(
+            env_map.get("NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE", "/api/notebooks/{notebook_id}")
+        ),
         signature_ttl_seconds=_int_setting(env_map, "NBLAUNCH_SIGNATURE_TTL_SECONDS", 300),
         max_notebook_bytes=_int_setting(env_map, "NBLAUNCH_MAX_NOTEBOOK_BYTES", 10 * 1024 * 1024),
         gallery_timeout_seconds=_int_setting(env_map, "NBLAUNCH_GALLERY_TIMEOUT_SECONDS", 10),

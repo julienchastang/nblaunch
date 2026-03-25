@@ -64,6 +64,27 @@ def test_fetch_notebook_happy_path() -> None:
     assert payload.content == notebook_bytes
 
 
+def test_fetch_notebook_uses_configured_download_template() -> None:
+    notebook_bytes = (FIXTURES / "sample_notebook.ipynb").read_bytes()
+
+    def _opener(url: str, timeout: int) -> FakeResponse:
+        assert "/notebooks/gallery/notebook.ipynb/download?clickstream=false" in url
+        assert timeout == 3
+        return FakeResponse(notebook_bytes, content_type="application/octet-stream")
+
+    payload = fetch_notebook(
+        base_url="https://gallery.example",
+        notebook_id="gallery/notebook.ipynb",
+        path_template="/notebooks/{notebook_id}/download?clickstream=false",
+        timeout_seconds=3,
+        max_bytes=1024 * 128,
+        opener=_opener,
+    )
+
+    assert payload.notebook_id == "gallery/notebook.ipynb"
+    assert payload.content == notebook_bytes
+
+
 def test_fetch_notebook_rejects_html_content_type() -> None:
     body = (FIXTURES / "bad_html_response.html").read_bytes()
 

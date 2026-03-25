@@ -51,9 +51,9 @@ class NotebookPayload:
     content_type: str
 
 
-def _build_notebook_url(base_url: str, notebook_id: str) -> str:
+def _build_notebook_url(base_url: str, notebook_id: str, path_template: str) -> str:
     encoded = quote(notebook_id, safe="/._-")
-    return f"{base_url.rstrip('/')}/api/notebooks/{encoded}"
+    return f"{base_url.rstrip('/')}{path_template.format(notebook_id=encoded)}"
 
 
 def _content_type(headers: dict[str, str]) -> str:
@@ -65,12 +65,13 @@ def fetch_notebook(
     *,
     base_url: str,
     notebook_id: str,
+    path_template: str = "/api/notebooks/{notebook_id}",
     timeout_seconds: int,
     max_bytes: int,
     opener: Callable[..., object] | None = None,
 ) -> NotebookPayload:
     open_fn = urlopen if opener is None else opener
-    url = _build_notebook_url(base_url, notebook_id)
+    url = _build_notebook_url(base_url, notebook_id, path_template)
 
     try:
         with cast(GalleryResponse, open_fn(url, timeout=timeout_seconds)) as response:

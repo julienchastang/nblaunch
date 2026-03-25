@@ -12,7 +12,8 @@ Secrets:
 
 Non-secrets:
 - `NBLAUNCH_HUB_API_URL`: Hub API base URL, for example `http://hub:8081/hub/api`.
-- `NBLAUNCH_GALLERY_BASE_URL`: notebook-source base URL, for example `https://gallery.example/api`.
+- `NBLAUNCH_GALLERY_BASE_URL`: notebook-source site root, for example `https://gallery.example`.
+- `NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE`: notebook download path template, default `/api/notebooks/{notebook_id}`.
 - `NBLAUNCH_NOTEBOOK_BASE_DIR`: filesystem root containing per-user notebook homes.
 - `NBLAUNCH_JUPYTERHUB_BASE_URL`: Hub base URL prefix, default `/`.
 
@@ -55,7 +56,8 @@ docker run --rm -p 8000:8000 \
   -e NBLAUNCH_HMAC_SECRET=example \
   -e NBLAUNCH_SERVICE_TOKEN=example \
   -e NBLAUNCH_HUB_API_URL=http://hub:8081/hub/api \
-  -e NBLAUNCH_GALLERY_BASE_URL=https://gallery.example/api \
+  -e NBLAUNCH_GALLERY_BASE_URL=https://gallery.example \
+  -e NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE='/notebooks/{notebook_id}/download?clickstream=false' \
   -e NBLAUNCH_NOTEBOOK_BASE_DIR=/srv/jupyterhub/users \
   -e NBLAUNCH_JUPYTERHUB_BASE_URL=/hub \
   nblaunch:dev
@@ -71,7 +73,7 @@ Stage 07 deployment assets live under `services/nblaunch/k8s/`:
 Recommended rollout sequence:
 1. Build and publish the image tag you intend to deploy.
 2. Copy `services/nblaunch/k8s/secret.example.yaml` to your deployment system and replace placeholder values.
-3. Update `services/nblaunch/k8s/deployment.yaml` with the real image tag, real `NBLAUNCH_GALLERY_BASE_URL`, and any cluster-specific PVC name.
+3. Update `services/nblaunch/k8s/deployment.yaml` with the real image tag, real `NBLAUNCH_GALLERY_BASE_URL`, real `NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE`, and any cluster-specific PVC name.
 4. Roll out the Hub-side configuration with `helm upgrade --install ... --values jupyterhub/values-nblaunch.yaml` and your existing secret values.
 5. Apply the `nblaunch` Secret, Deployment, and Service.
 6. Wait for the Deployment to become ready before routing user traffic.
@@ -130,7 +132,7 @@ Common failure modes:
 
 Practical checks:
 1. Confirm `NBLAUNCH_HUB_API_URL` matches the real Hub API path.
-2. Confirm `NBLAUNCH_GALLERY_BASE_URL` points at a real notebook source reachable from the `nblaunch` pod.
+2. Confirm `NBLAUNCH_GALLERY_BASE_URL` and `NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE` together resolve to a real notebook download endpoint reachable from the `nblaunch` pod.
 3. Confirm the service token in Kubernetes matches the JupyterHub service registration.
 4. Confirm the mounted notebook root matches the Stage 06 home-subpath algorithm and spawn-hook assumptions.
 5. Re-run the smoke tests after any config edit.

@@ -24,6 +24,7 @@ def test_load_settings_parses_required_and_defaults() -> None:
     assert settings.hub_api_url == "https://hub.example/hub/api"
     assert settings.gallery_base_url == "https://gallery.example/api"
     assert settings.notebook_base_dir == "/srv/notebooks"
+    assert settings.gallery_download_path_template == "/api/notebooks/{notebook_id}"
     assert settings.signature_ttl_seconds == 300
     assert settings.max_notebook_bytes == 10 * 1024 * 1024
 
@@ -65,4 +66,21 @@ def test_load_settings_requires_absolute_gallery_base_url() -> None:
     env["NBLAUNCH_GALLERY_BASE_URL"] = "not-a-url"
 
     with pytest.raises(ConfigError, match="absolute http"):
+        _ = load_settings(env)
+
+
+def test_load_settings_validates_gallery_download_template() -> None:
+    env = _base_env()
+    env["NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE"] = "/notebooks/{notebook_id}/download?clickstream=false"
+
+    settings = load_settings(env)
+
+    assert settings.gallery_download_path_template.endswith("clickstream=false")
+
+
+def test_load_settings_rejects_template_without_placeholder() -> None:
+    env = _base_env()
+    env["NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE"] = "/notebooks/download"
+
+    with pytest.raises(ConfigError, match="notebook_id"):
         _ = load_settings(env)
