@@ -108,7 +108,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.state.settings = app_settings
     app.state.resolve_user_root = _resolve_user_root
-    app.state.gallery_base_url = "http://127.0.0.1:9"
+    app.state.gallery_base_url = app_settings.gallery_base_url
     app.state.fetch_notebook = fetch_notebook
     app.state.write_notebook = write_notebook
     app.state.service_auth = JupyterHubServiceAuth(app_settings)

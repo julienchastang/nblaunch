@@ -36,6 +36,8 @@ spec:
                   key: service-token
             - name: NBLAUNCH_HUB_API_URL
               value: http://hub:8081/hub/api
+            - name: NBLAUNCH_GALLERY_BASE_URL
+              value: https://gallery.example/api
             - name: NBLAUNCH_NOTEBOOK_BASE_DIR
               value: /srv/jupyterhub/users
             - name: NBLAUNCH_JUPYTERHUB_BASE_URL

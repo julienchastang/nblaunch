@@ -13,6 +13,7 @@ def _settings() -> Settings:
         hmac_secret="secret",
         service_token="token",
         hub_api_url="https://hub.example/hub/api",
+        gallery_base_url="https://gallery.example/api",
         notebook_base_dir="/srv/notebooks",
     )
 

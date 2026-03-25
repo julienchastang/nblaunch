@@ -43,6 +43,7 @@ def _settings(tmp_path: Path) -> Settings:
         hmac_secret="secret",
         service_token="token",
         hub_api_url="https://hub.example/hub/api",
+        gallery_base_url="https://gallery.example/api",
         notebook_base_dir=str(tmp_path),
         signature_ttl_seconds=300,
         jupyterhub_base_url="/hub",

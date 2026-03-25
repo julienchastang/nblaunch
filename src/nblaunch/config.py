@@ -18,6 +18,7 @@ class Settings:
     hmac_secret: str
     service_token: str
     hub_api_url: str
+    gallery_base_url: str
     notebook_base_dir: str
     signature_ttl_seconds: int = 300
     max_notebook_bytes: int = 10 * 1024 * 1024
@@ -53,6 +54,12 @@ def _validate_hub_api_url(hub_api_url: str) -> None:
         raise ConfigError("NBLAUNCH_HUB_API_URL must be an absolute http(s) URL")
 
 
+def _validate_gallery_base_url(gallery_base_url: str) -> None:
+    parsed = urlparse(gallery_base_url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ConfigError("NBLAUNCH_GALLERY_BASE_URL must be an absolute http(s) URL")
+
+
 def _normalize_base_url(value: str) -> str:
     base = value.strip() or "/"
     if not base.startswith("/"):
@@ -68,17 +75,20 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     hmac_secret = _required(env_map, "NBLAUNCH_HMAC_SECRET")
     service_token = _required(env_map, "NBLAUNCH_SERVICE_TOKEN")
     hub_api_url = _required(env_map, "NBLAUNCH_HUB_API_URL")
+    gallery_base_url = _required(env_map, "NBLAUNCH_GALLERY_BASE_URL")
     notebook_base_dir = _required(env_map, "NBLAUNCH_NOTEBOOK_BASE_DIR")
 
     if not isabs(notebook_base_dir):
         raise ConfigError("NBLAUNCH_NOTEBOOK_BASE_DIR must be an absolute path")
 
     _validate_hub_api_url(hub_api_url)
+    _validate_gallery_base_url(gallery_base_url)
 
     return Settings(
         hmac_secret=hmac_secret,
         service_token=service_token,
         hub_api_url=hub_api_url,
+        gallery_base_url=gallery_base_url,
         notebook_base_dir=notebook_base_dir,
         signature_ttl_seconds=_int_setting(env_map, "NBLAUNCH_SIGNATURE_TTL_SECONDS", 300),
         max_notebook_bytes=_int_setting(env_map, "NBLAUNCH_MAX_NOTEBOOK_BYTES", 10 * 1024 * 1024),
