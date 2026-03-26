@@ -15,6 +15,7 @@ spec:
       labels:
         app.kubernetes.io/name: nblaunch
         app.kubernetes.io/component: service
+        hub.jupyter.org/network-access-hub: "true"
     spec:
       containers:
         - name: nblaunch
@@ -35,7 +36,7 @@ spec:
                   name: nblaunch-secrets
                   key: service-token
             - name: NBLAUNCH_HUB_API_URL
-              value: http://proxy-public/hub/api
+              value: http://hub:8081/hub/api
             - name: NBLAUNCH_GALLERY_BASE_URL
               value: https://gallery.example
             - name: NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE
