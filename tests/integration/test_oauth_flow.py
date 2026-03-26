@@ -53,8 +53,10 @@ def test_launch_redirects_to_hub_oauth_when_unauthenticated(tmp_path: Path) -> N
 def test_oauth_callback_roundtrip_restores_original_launch_request(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
 
-    def _resolved_username(_request: Request) -> str | None:
-        return "user-a"
+    def _resolved_username(request: Request) -> str | None:
+        if request.url.path.endswith("/oauth_callback"):
+            return "user-a"
+        return None
 
     app.state.service_auth._hub_authenticated_user = _resolved_username
 
@@ -118,3 +120,36 @@ def test_oauth_callback_rejects_when_hub_user_cannot_be_resolved(tmp_path: Path)
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "oauth_callback_failed"
+
+
+def test_launch_ignores_legacy_placeholder_cookie_when_hub_user_is_available(tmp_path: Path) -> None:
+    app = create_app(_settings(tmp_path))
+
+    def _resolved_username(_request: Request) -> str | None:
+        return "chastang@access-ci.org"
+
+    app.state.service_auth._hub_authenticated_user = _resolved_username
+
+    def _fake_fetch(**_: object) -> NotebookPayload:
+        return NotebookPayload(
+            notebook_id="gallery/notebook",
+            content=b"{}",
+            content_type="application/x-ipynb+json",
+        )
+
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        _ = settings
+        assert username == "chastang@access-ci.org"
+        return tmp_path / "user-a"
+
+    app.state.fetch_notebook = _fake_fetch
+    app.state.resolve_user_root = _resolve_user_root
+
+    client = TestClient(app)
+    client.cookies.set("nblaunch-user", "oauth-authenticated-user")
+
+    response = client.get("/launch", params=_valid_query(), follow_redirects=False)
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/hub/user-redirect/lab/tree/nbgallery/gallery/notebook.ipynb"

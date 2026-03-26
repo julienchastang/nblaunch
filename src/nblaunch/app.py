@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import secrets
 from pathlib import Path
 from json import JSONDecodeError, loads
@@ -30,6 +31,10 @@ HUB_USER_PATH = "/api/user"
 _USER_COOKIE = "nblaunch-user"
 _STATE_COOKIE = "nblaunch-oauth-state"
 _NEXT_COOKIE = "nblaunch-oauth-next"
+_LEGACY_PLACEHOLDER_USER = "oauth-authenticated-user"
+
+
+logger = logging.getLogger(__name__)
 
 
 def _hub_path(base_url: str, suffix: str) -> str:
@@ -68,6 +73,7 @@ class JupyterHubServiceAuth:
     def _hub_authenticated_user(self, request: Request) -> str | None:
         cookie_header = request.headers.get("cookie")
         if not cookie_header:
+            logger.info("nblaunch auth current_user incoming cookies=%r", dict(request.cookies))
             return None
 
         hub_request = UrlRequest(
@@ -81,6 +87,11 @@ class JupyterHubServiceAuth:
             with urlopen(hub_request, timeout=self._http_timeout_seconds) as response:
                 payload = response.read().decode("utf-8")
         except (HTTPError, URLError, OSError):
+            logger.info(
+                "nblaunch auth hub-user lookup failed cookies=%r hub_user_url=%r",
+                dict(request.cookies),
+                self._hub_user_url,
+            )
             return None
 
         try:
@@ -96,7 +107,17 @@ class JupyterHubServiceAuth:
 
     def current_user(self, request: Request) -> str | None:
         user = request.cookies.get(_USER_COOKIE)
-        return user if isinstance(user, str) and user else None
+        cookie_user = user if isinstance(user, str) and user and user != _LEGACY_PLACEHOLDER_USER else None
+        hub_user = self._hub_authenticated_user(request)
+        resolved = hub_user or cookie_user
+        logger.info(
+            "nblaunch auth current_user incoming cookies=%r cookie_user=%r hub_user=%r resolved_username=%r",
+            dict(request.cookies),
+            cookie_user,
+            hub_user,
+            resolved,
+        )
+        return resolved
 
     def login_redirect(self, request: Request) -> Response:
         oauth_state = secrets.token_urlsafe(24)
@@ -133,6 +154,11 @@ class JupyterHubServiceAuth:
             )
 
         username = self._hub_authenticated_user(request)
+        logger.info(
+            "nblaunch auth oauth_callback incoming cookies=%r resolved_username=%r",
+            dict(request.cookies),
+            username,
+        )
         if username is None:
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,

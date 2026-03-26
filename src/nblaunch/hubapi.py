@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from json import JSONDecodeError, loads
 from pathlib import Path
 from typing import Protocol, cast
@@ -13,6 +14,9 @@ from .storage import StorageError, resolve_user_root_from_home_subpath
 
 
 NBLAUNCH_HOME_SUBPATH_API_PATH = "/services/nblaunch/home-subpath"
+
+
+logger = logging.getLogger(__name__)
 
 
 class HubApiError(RuntimeError):
@@ -50,6 +54,7 @@ def _home_subpath_url(hub_api_url: str, username: str) -> str:
 
 
 def _default_fetch_json(*, url: str, token: str, timeout_seconds: int) -> object:
+    logger.info("nblaunch home-subpath lookup url=%r", url)
     request = Request(
         url,
         headers={
