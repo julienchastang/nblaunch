@@ -32,6 +32,11 @@ _USER_COOKIE = "nblaunch-user"
 _STATE_COOKIE = "nblaunch-oauth-state"
 _NEXT_COOKIE = "nblaunch-oauth-next"
 _LEGACY_PLACEHOLDER_USER = "oauth-authenticated-user"
+_FORWARDED_USER_HEADERS = (
+    "X-Forwarded-User",
+    "X-Auth-Request-User",
+    "Remote-User",
+)
 
 
 logger = logging.getLogger(__name__)
@@ -40,6 +45,16 @@ logger = logging.getLogger(__name__)
 def _hub_path(base_url: str, suffix: str) -> str:
     prefix = "" if base_url == "/" else base_url
     return f"{prefix}{suffix}"
+
+
+def _resolved_username(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+
+    username = value.strip().strip('"')
+    if not username or username == _LEGACY_PLACEHOLDER_USER:
+        return None
+    return username
 
 
 async def service_root() -> dict[str, str]:
@@ -72,8 +87,29 @@ class JupyterHubServiceAuth:
 
     def _hub_authenticated_user(self, request: Request) -> str | None:
         cookie_header = request.headers.get("cookie")
+        forwarded_user: str | None = None
+        for header_name in _FORWARDED_USER_HEADERS:
+            header_value = _resolved_username(request.headers.get(header_name))
+            if header_value is not None:
+                forwarded_user = header_value
+                break
+
+        logger.info(
+            "nblaunch auth _hub_authenticated_user hub_user_url=%r cookies_forwarded=%r incoming_cookies=%r forwarded_headers=%r",
+            self._hub_user_url,
+            bool(cookie_header),
+            dict(request.cookies),
+            {header_name: request.headers.get(header_name) for header_name in _FORWARDED_USER_HEADERS},
+        )
+
         if not cookie_header:
-            logger.info("nblaunch auth current_user incoming cookies=%r", dict(request.cookies))
+            if forwarded_user is not None:
+                logger.info(
+                    "nblaunch auth _hub_authenticated_user resolved from forwarded header username=%r",
+                    forwarded_user,
+                )
+                return forwarded_user
+            logger.info("nblaunch auth _hub_authenticated_user no cookies or forwarded user")
             return None
 
         hub_request = UrlRequest(
@@ -92,22 +128,44 @@ class JupyterHubServiceAuth:
                 dict(request.cookies),
                 self._hub_user_url,
             )
-            return None
+            return forwarded_user
+
+        logger.info(
+            "nblaunch auth _hub_authenticated_user hub_user_url=%r raw_payload=%r",
+            self._hub_user_url,
+            payload,
+        )
 
         try:
             data = loads(payload)
         except JSONDecodeError:
-            return None
+            return forwarded_user
 
         if not isinstance(data, dict):
-            return None
+            if forwarded_user is not None:
+                logger.info(
+                    "nblaunch auth _hub_authenticated_user falling back to forwarded header after non-dict hub payload username=%r",
+                    forwarded_user,
+                )
+            return forwarded_user
         data_dict = cast(dict[str, object], data)
-        username = data_dict.get("name")
-        return username if isinstance(username, str) and username else None
+        resolved = _resolved_username(data_dict.get("name"))
+        logger.info(
+            "nblaunch auth _hub_authenticated_user resolved from hub api username=%r",
+            resolved,
+        )
+        if resolved is not None:
+            return resolved
+
+        if forwarded_user is not None:
+            logger.info(
+                "nblaunch auth _hub_authenticated_user falling back to forwarded header after empty hub username=%r",
+                forwarded_user,
+            )
+        return forwarded_user
 
     def current_user(self, request: Request) -> str | None:
-        user = request.cookies.get(_USER_COOKIE)
-        cookie_user = user if isinstance(user, str) and user and user != _LEGACY_PLACEHOLDER_USER else None
+        cookie_user = _resolved_username(request.cookies.get(_USER_COOKIE))
         hub_user = self._hub_authenticated_user(request)
         resolved = hub_user or cookie_user
         logger.info(

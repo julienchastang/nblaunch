@@ -153,3 +153,73 @@ def test_launch_ignores_legacy_placeholder_cookie_when_hub_user_is_available(tmp
 
     assert response.status_code == 302
     assert response.headers["location"] == "/hub/user-redirect/lab/tree/nbgallery/gallery/notebook.ipynb"
+
+
+def test_launch_prefers_forwarded_hub_user_header(tmp_path: Path) -> None:
+    app = create_app(_settings(tmp_path))
+
+    def _fake_fetch(**_: object) -> NotebookPayload:
+        return NotebookPayload(
+            notebook_id="gallery/notebook",
+            content=b"{}",
+            content_type="application/x-ipynb+json",
+        )
+
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        _ = settings
+        assert username == "chastang@access-ci.org"
+        return tmp_path / "user-a"
+
+    app.state.fetch_notebook = _fake_fetch
+    app.state.resolve_user_root = _resolve_user_root
+
+    client = TestClient(app)
+    client.cookies.set("nblaunch-user", "oauth-authenticated-user")
+
+    response = client.get(
+        "/launch",
+        params=_valid_query(),
+        headers={"X-Forwarded-User": "chastang@access-ci.org"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/hub/user-redirect/lab/tree/nbgallery/gallery/notebook.ipynb"
+
+
+def test_launch_prefers_hub_api_user_over_forwarded_header(tmp_path: Path) -> None:
+    app = create_app(_settings(tmp_path))
+
+    def _fake_fetch(**_: object) -> NotebookPayload:
+        return NotebookPayload(
+            notebook_id="gallery/notebook",
+            content=b"{}",
+            content_type="application/x-ipynb+json",
+        )
+
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        _ = settings
+        assert username == "chastang@access-ci.org"
+        return tmp_path / "user-a"
+
+    def _resolved_username(_request: Request) -> str | None:
+        return "chastang@access-ci.org"
+
+    app.state.fetch_notebook = _fake_fetch
+    app.state.resolve_user_root = _resolve_user_root
+    app.state.service_auth._hub_authenticated_user = _resolved_username
+
+    client = TestClient(app)
+    client.cookies.set("nblaunch-user", "oauth-authenticated-user")
+
+    response = client.get(
+        "/launch",
+        params=_valid_query(),
+        headers={"X-Forwarded-User": '"oauth-authenticated-user"'},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/hub/user-redirect/lab/tree/nbgallery/gallery/notebook.ipynb"
