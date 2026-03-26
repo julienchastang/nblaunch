@@ -53,12 +53,11 @@ def test_launch_redirects_to_hub_oauth_when_unauthenticated(tmp_path: Path) -> N
 def test_oauth_callback_roundtrip_restores_original_launch_request(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
 
-    def _resolved_username(request: Request) -> str | None:
-        if request.url.path.endswith("/oauth_callback"):
-            return "user-a"
-        return None
+    def _resolved_username(code: str) -> str | None:
+        assert code == "oauth-code"
+        return "user-a"
 
-    app.state.service_auth._hub_authenticated_user = _resolved_username
+    app.state.service_auth._oauth_authenticated_user = _resolved_username
 
     def _fake_fetch(**_: object) -> NotebookPayload:
         return NotebookPayload(
@@ -108,10 +107,10 @@ def test_oauth_callback_rejects_invalid_state(tmp_path: Path) -> None:
 def test_oauth_callback_rejects_when_hub_user_cannot_be_resolved(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
 
-    def _missing_username(_request: Request) -> str | None:
+    def _missing_username(_code: str) -> str | None:
         return None
 
-    app.state.service_auth._hub_authenticated_user = _missing_username
+    app.state.service_auth._oauth_authenticated_user = _missing_username
     client = TestClient(app)
     initial = client.get("/launch", params=_valid_query(), follow_redirects=False)
     state = parse_qs(urlparse(initial.headers["location"]).query)["state"][0]
@@ -223,3 +222,23 @@ def test_launch_prefers_hub_api_user_over_forwarded_header(tmp_path: Path) -> No
 
     assert response.status_code == 302
     assert response.headers["location"] == "/hub/user-redirect/lab/tree/nbgallery/gallery/notebook.ipynb"
+
+
+def test_oauth_callback_exchanges_code_for_real_user_without_hub_cookies(tmp_path: Path) -> None:
+    app = create_app(_settings(tmp_path))
+
+    def _oauth_username(code: str) -> str | None:
+        assert code == "oauth-code"
+        return "chastang@access-ci.org"
+
+    app.state.service_auth._oauth_authenticated_user = _oauth_username
+
+    client = TestClient(app)
+    initial = client.get("/launch", params=_valid_query(), follow_redirects=False)
+    state = parse_qs(urlparse(initial.headers["location"]).query)["state"][0]
+
+    callback = client.get(f"/oauth_callback?code=oauth-code&state={state}", follow_redirects=False)
+
+    assert callback.status_code == 302
+    assert callback.headers["location"].startswith("/launch?")
+    assert (client.cookies.get("nblaunch-user") or "").strip('"') == "chastang@access-ci.org"

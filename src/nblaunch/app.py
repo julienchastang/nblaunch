@@ -27,6 +27,7 @@ SERVICE_PREFIX = "/services/nblaunch"
 SERVICE_OAUTH_CLIENT_ID = "service-nblaunch"
 SERVICE_CALLBACK_PATH = "/oauth_callback"
 HUB_AUTHORIZE_PATH = "/api/oauth2/authorize"
+HUB_TOKEN_PATH = "/api/oauth2/token"
 HUB_USER_PATH = "/api/user"
 _USER_COOKIE = "nblaunch-user"
 _STATE_COOKIE = "nblaunch-oauth-state"
@@ -65,25 +66,94 @@ class JupyterHubServiceAuth:
     _authorize_url: str
     _callback_url: str
     _service_root: str
+    _hub_token_url: str
     _hub_user_url: str
     _http_timeout_seconds: int
+    _service_token: str
 
     def __init__(self, settings: Settings) -> None:
         self._authorize_url = _hub_path(settings.jupyterhub_base_url, HUB_AUTHORIZE_PATH)
         self._callback_url = f"{SERVICE_PREFIX}{SERVICE_CALLBACK_PATH}"
         self._service_root = SERVICE_PREFIX
-        self._hub_user_url = self._hub_user_api_url(settings)
+        self._hub_token_url = self._hub_api_url(settings, HUB_TOKEN_PATH)
+        self._hub_user_url = self._hub_api_url(settings, HUB_USER_PATH)
         self._http_timeout_seconds = settings.http_timeout_seconds
+        self._service_token = settings.service_token
 
     @staticmethod
-    def _hub_user_api_url(settings: Settings) -> str:
+    def _hub_api_url(settings: Settings, path: str) -> str:
         hub_api_url = settings.hub_api_url.rstrip("/")
         api_base = _hub_path(settings.jupyterhub_base_url, "/api")
         if hub_api_url.endswith(api_base):
             hub_origin = hub_api_url[: -len(api_base)]
         else:
             hub_origin = hub_api_url
-        return f"{hub_origin}{_hub_path(settings.jupyterhub_base_url, HUB_USER_PATH)}"
+        return f"{hub_origin}{_hub_path(settings.jupyterhub_base_url, path)}"
+
+    def _json_request(
+        self,
+        *,
+        url: str,
+        headers: dict[str, str],
+        data: bytes | None = None,
+    ) -> object | None:
+        hub_request = UrlRequest(url, headers=headers, data=data)
+        try:
+            with urlopen(hub_request, timeout=self._http_timeout_seconds) as response:
+                payload = response.read().decode("utf-8")
+        except (HTTPError, URLError, OSError):
+            return None
+
+        try:
+            return cast(object, loads(payload))
+        except JSONDecodeError:
+            return None
+
+    def _oauth_authenticated_user(self, code: str) -> str | None:
+        token_payload = urlencode(
+            {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": self._callback_url,
+                "client_id": SERVICE_OAUTH_CLIENT_ID,
+                "client_secret": self._service_token,
+            }
+        ).encode("utf-8")
+        token_response = self._json_request(
+            url=self._hub_token_url,
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            data=token_payload,
+        )
+        logger.info(
+            "nblaunch auth _oauth_authenticated_user token_url=%r token_response=%r",
+            self._hub_token_url,
+            token_response,
+        )
+        if not isinstance(token_response, dict):
+            return None
+
+        access_token = token_response.get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            return None
+
+        user_response = self._json_request(
+            url=self._hub_user_url,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"token {access_token}",
+            },
+        )
+        logger.info(
+            "nblaunch auth _oauth_authenticated_user hub_user_url=%r user_response=%r",
+            self._hub_user_url,
+            user_response,
+        )
+        if not isinstance(user_response, dict):
+            return None
+        return _resolved_username(user_response.get("name"))
 
     def _hub_authenticated_user(self, request: Request) -> str | None:
         cookie_header = request.headers.get("cookie")
@@ -112,17 +182,14 @@ class JupyterHubServiceAuth:
             logger.info("nblaunch auth _hub_authenticated_user no cookies or forwarded user")
             return None
 
-        hub_request = UrlRequest(
-            self._hub_user_url,
+        data = self._json_request(
+            url=self._hub_user_url,
             headers={
                 "Accept": "application/json",
                 "Cookie": cookie_header,
             },
         )
-        try:
-            with urlopen(hub_request, timeout=self._http_timeout_seconds) as response:
-                payload = response.read().decode("utf-8")
-        except (HTTPError, URLError, OSError):
+        if data is None:
             logger.info(
                 "nblaunch auth hub-user lookup failed cookies=%r hub_user_url=%r",
                 dict(request.cookies),
@@ -133,13 +200,8 @@ class JupyterHubServiceAuth:
         logger.info(
             "nblaunch auth _hub_authenticated_user hub_user_url=%r raw_payload=%r",
             self._hub_user_url,
-            payload,
+            data,
         )
-
-        try:
-            data = loads(payload)
-        except JSONDecodeError:
-            return forwarded_user
 
         if not isinstance(data, dict):
             if forwarded_user is not None:
@@ -211,10 +273,11 @@ class JupyterHubServiceAuth:
                 },
             )
 
-        username = self._hub_authenticated_user(request)
+        username = self._oauth_authenticated_user(code)
         logger.info(
-            "nblaunch auth oauth_callback incoming cookies=%r resolved_username=%r",
+            "nblaunch auth oauth_callback incoming cookies=%r code_present=%r resolved_username=%r",
             dict(request.cookies),
+            bool(code),
             username,
         )
         if username is None:
