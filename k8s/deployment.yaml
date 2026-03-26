@@ -35,7 +35,7 @@ spec:
                   name: nblaunch-secrets
                   key: service-token
             - name: NBLAUNCH_HUB_API_URL
-              value: http://hub:8081/hub/api
+              value: http://proxy-public/hub/api
             - name: NBLAUNCH_GALLERY_BASE_URL
               value: https://gallery.example
             - name: NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE
