@@ -8,7 +8,7 @@ from collections.abc import Callable, Mapping
 from typing import Protocol, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 
 class GalleryResponse(Protocol):
@@ -66,15 +66,17 @@ def fetch_notebook(
     base_url: str,
     notebook_id: str,
     path_template: str = "/api/notebooks/{notebook_id}",
+    user_agent: str,
     timeout_seconds: int,
     max_bytes: int,
     opener: Callable[..., object] | None = None,
 ) -> NotebookPayload:
     open_fn = urlopen if opener is None else opener
     url = _build_notebook_url(base_url, notebook_id, path_template)
+    request = Request(url, headers={"User-Agent": user_agent})
 
     try:
-        with cast(GalleryResponse, open_fn(url, timeout=timeout_seconds)) as response:
+        with cast(GalleryResponse, open_fn(request, timeout=timeout_seconds)) as response:
             headers = dict(response.headers)
             content_type = _content_type(headers)
             if content_type == "text/html":

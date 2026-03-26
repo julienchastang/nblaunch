@@ -25,6 +25,7 @@ def test_load_settings_parses_required_and_defaults() -> None:
     assert settings.gallery_base_url == "https://gallery.example/api"
     assert settings.notebook_base_dir == "/srv/notebooks"
     assert settings.gallery_download_path_template == "/api/notebooks/{notebook_id}"
+    assert "Mozilla/5.0" in settings.gallery_user_agent
     assert settings.signature_ttl_seconds == 300
     assert settings.max_notebook_bytes == 10 * 1024 * 1024
 
@@ -84,3 +85,12 @@ def test_load_settings_rejects_template_without_placeholder() -> None:
 
     with pytest.raises(ConfigError, match="notebook_id"):
         _ = load_settings(env)
+
+
+def test_load_settings_allows_gallery_user_agent_override() -> None:
+    env = _base_env()
+    env["NBLAUNCH_GALLERY_USER_AGENT"] = "custom-agent/1.0"
+
+    settings = load_settings(env)
+
+    assert settings.gallery_user_agent == "custom-agent/1.0"

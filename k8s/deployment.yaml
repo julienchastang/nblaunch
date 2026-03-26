@@ -40,6 +40,8 @@ spec:
               value: https://gallery.example
             - name: NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE
               value: /notebooks/{notebook_id}/download?clickstream=false
+            - name: NBLAUNCH_GALLERY_USER_AGENT
+              value: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36
             - name: NBLAUNCH_NOTEBOOK_BASE_DIR
               value: /srv/jupyterhub/users
             - name: NBLAUNCH_JUPYTERHUB_BASE_URL

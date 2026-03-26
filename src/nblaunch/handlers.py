@@ -28,6 +28,7 @@ class NotebookFetcher(Protocol):
         base_url: str,
         notebook_id: str,
         path_template: str,
+        user_agent: str,
         timeout_seconds: int,
         max_bytes: int,
     ) -> NotebookPayload:
@@ -60,6 +61,7 @@ class AppState(Protocol):
     resolve_user_root: UserRootResolver | None
     gallery_base_url: str
     gallery_download_path_template: str
+    gallery_user_agent: str
     fetch_notebook: NotebookFetcher
     write_notebook: NotebookWriter
     service_auth: ServiceAuth
@@ -122,6 +124,7 @@ async def launch(request: Request) -> Response:
 
     gallery_base_url = state.gallery_base_url
     gallery_download_path_template = state.gallery_download_path_template
+    gallery_user_agent = state.gallery_user_agent
     fetcher = state.fetch_notebook
     writer = state.write_notebook
 
@@ -130,6 +133,7 @@ async def launch(request: Request) -> Response:
             base_url=gallery_base_url,
             notebook_id=validated.notebook_id,
             path_template=gallery_download_path_template,
+            user_agent=gallery_user_agent,
             timeout_seconds=settings.gallery_timeout_seconds,
             max_bytes=settings.max_notebook_bytes,
         )

@@ -13,6 +13,12 @@ class ConfigError(ValueError):
     """Raised when service configuration is invalid."""
 
 
+DEFAULT_GALLERY_USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+)
+
+
 @dataclass(frozen=True)
 class Settings:
     hmac_secret: str
@@ -21,6 +27,7 @@ class Settings:
     gallery_base_url: str
     notebook_base_dir: str
     gallery_download_path_template: str = "/api/notebooks/{notebook_id}"
+    gallery_user_agent: str = DEFAULT_GALLERY_USER_AGENT
     signature_ttl_seconds: int = 300
     max_notebook_bytes: int = 10 * 1024 * 1024
     gallery_timeout_seconds: int = 10
@@ -105,6 +112,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         gallery_download_path_template=_normalize_gallery_download_path_template(
             env_map.get("NBLAUNCH_GALLERY_DOWNLOAD_PATH_TEMPLATE", "/api/notebooks/{notebook_id}")
         ),
+        gallery_user_agent=(env_map.get("NBLAUNCH_GALLERY_USER_AGENT", DEFAULT_GALLERY_USER_AGENT) or DEFAULT_GALLERY_USER_AGENT),
         signature_ttl_seconds=_int_setting(env_map, "NBLAUNCH_SIGNATURE_TTL_SECONDS", 300),
         max_notebook_bytes=_int_setting(env_map, "NBLAUNCH_MAX_NOTEBOOK_BYTES", 10 * 1024 * 1024),
         gallery_timeout_seconds=_int_setting(env_map, "NBLAUNCH_GALLERY_TIMEOUT_SECONDS", 10),
