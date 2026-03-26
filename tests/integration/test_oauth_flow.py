@@ -45,13 +45,18 @@ def test_launch_redirects_to_hub_oauth_when_unauthenticated(tmp_path: Path) -> N
     params = parse_qs(parsed.query)
     assert parsed.path == "/hub/api/oauth2/authorize"
     assert params["client_id"] == ["service-nblaunch"]
-    assert params["redirect_uri"] == ["/hub/services/nblaunch/oauth_callback"]
+    assert params["redirect_uri"] == ["/services/nblaunch/oauth_callback"]
     assert params["response_type"] == ["code"]
     assert params["state"]
 
 
 def test_oauth_callback_roundtrip_restores_original_launch_request(tmp_path: Path) -> None:
     app = create_app(_settings(tmp_path))
+
+    def _resolved_username(_request: Request) -> str | None:
+        return "user-a"
+
+    app.state.service_auth._hub_authenticated_user = _resolved_username
 
     def _fake_fetch(**_: object) -> NotebookPayload:
         return NotebookPayload(
@@ -93,6 +98,23 @@ def test_oauth_callback_rejects_invalid_state(tmp_path: Path) -> None:
     _ = client.get("/launch", params=_valid_query(), follow_redirects=False)
 
     response = client.get("/oauth_callback?code=oauth-code&state=wrong-state", follow_redirects=False)
+
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "oauth_callback_failed"
+
+
+def test_oauth_callback_rejects_when_hub_user_cannot_be_resolved(tmp_path: Path) -> None:
+    app = create_app(_settings(tmp_path))
+
+    def _missing_username(_request: Request) -> str | None:
+        return None
+
+    app.state.service_auth._hub_authenticated_user = _missing_username
+    client = TestClient(app)
+    initial = client.get("/launch", params=_valid_query(), follow_redirects=False)
+    state = parse_qs(urlparse(initial.headers["location"]).query)["state"][0]
+
+    response = client.get(f"/oauth_callback?code=oauth-code&state={state}", follow_redirects=False)
 
     assert response.status_code == 401
     assert response.json()["error"]["code"] == "oauth_callback_failed"

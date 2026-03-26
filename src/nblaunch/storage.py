@@ -52,9 +52,13 @@ def _safe_notebook_relative_path(notebook_id: str) -> Path:
     return normalized
 
 
+def planned_notebook_path(*, user_root: Path, notebook_id: str) -> Path:
+    return user_root / _safe_notebook_relative_path(notebook_id)
+
+
 def write_notebook(*, user_root: Path, notebook_id: str, notebook_bytes: bytes) -> StoredNotebook:
     relative_path = _safe_notebook_relative_path(notebook_id)
-    destination = user_root / relative_path
+    destination = planned_notebook_path(user_root=user_root, notebook_id=notebook_id)
 
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)

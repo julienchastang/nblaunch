@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Protocol, cast
 
@@ -18,7 +19,10 @@ from .nbgallery import (
     GalleryUpstreamError,
 )
 from .security import ValidationError, validate_launch_request
-from .storage import StorageError, StoredNotebook
+from .storage import StorageError, StoredNotebook, planned_notebook_path
+
+
+logger = logging.getLogger(__name__)
 
 
 class NotebookFetcher(Protocol):
@@ -148,6 +152,19 @@ async def launch(request: Request) -> Response:
         return _error_response(status.HTTP_404_NOT_FOUND, "missing_user_home_mapping", str(exc))
     except HubApiError as exc:
         return _error_response(status.HTTP_502_BAD_GATEWAY, "hub_home_lookup_failed", str(exc))
+
+    try:
+        home_subpath = user_root.relative_to(settings.notebook_base_dir).as_posix()
+    except ValueError:
+        home_subpath = str(user_root)
+
+    destination_path = planned_notebook_path(user_root=user_root, notebook_id=validated.notebook_id)
+    logger.info(
+        "nblaunch resolved username=%r home_subpath=%r destination=%r",
+        username,
+        home_subpath,
+        str(destination_path),
+    )
 
     try:
         stored = writer(

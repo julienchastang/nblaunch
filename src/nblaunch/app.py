@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import secrets
 from pathlib import Path
+from json import JSONDecodeError, loads
+from typing import cast
 from urllib.parse import urlencode
+from urllib.request import Request as UrlRequest, urlopen
+from urllib.error import HTTPError, URLError
 
 from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -22,6 +26,7 @@ SERVICE_PREFIX = "/services/nblaunch"
 SERVICE_OAUTH_CLIENT_ID = "service-nblaunch"
 SERVICE_CALLBACK_PATH = "/oauth_callback"
 HUB_AUTHORIZE_PATH = "/api/oauth2/authorize"
+HUB_USER_PATH = "/api/user"
 _USER_COOKIE = "nblaunch-user"
 _STATE_COOKIE = "nblaunch-oauth-state"
 _NEXT_COOKIE = "nblaunch-oauth-next"
@@ -40,11 +45,54 @@ class JupyterHubServiceAuth:
     _authorize_url: str
     _callback_url: str
     _service_root: str
+    _hub_user_url: str
+    _http_timeout_seconds: int
 
     def __init__(self, settings: Settings) -> None:
         self._authorize_url = _hub_path(settings.jupyterhub_base_url, HUB_AUTHORIZE_PATH)
         self._callback_url = f"{SERVICE_PREFIX}{SERVICE_CALLBACK_PATH}"
         self._service_root = SERVICE_PREFIX
+        self._hub_user_url = self._hub_user_api_url(settings)
+        self._http_timeout_seconds = settings.http_timeout_seconds
+
+    @staticmethod
+    def _hub_user_api_url(settings: Settings) -> str:
+        hub_api_url = settings.hub_api_url.rstrip("/")
+        api_base = _hub_path(settings.jupyterhub_base_url, "/api")
+        if hub_api_url.endswith(api_base):
+            hub_origin = hub_api_url[: -len(api_base)]
+        else:
+            hub_origin = hub_api_url
+        return f"{hub_origin}{_hub_path(settings.jupyterhub_base_url, HUB_USER_PATH)}"
+
+    def _hub_authenticated_user(self, request: Request) -> str | None:
+        cookie_header = request.headers.get("cookie")
+        if not cookie_header:
+            return None
+
+        hub_request = UrlRequest(
+            self._hub_user_url,
+            headers={
+                "Accept": "application/json",
+                "Cookie": cookie_header,
+            },
+        )
+        try:
+            with urlopen(hub_request, timeout=self._http_timeout_seconds) as response:
+                payload = response.read().decode("utf-8")
+        except (HTTPError, URLError, OSError):
+            return None
+
+        try:
+            data = loads(payload)
+        except JSONDecodeError:
+            return None
+
+        if not isinstance(data, dict):
+            return None
+        data_dict = cast(dict[str, object], data)
+        username = data_dict.get("name")
+        return username if isinstance(username, str) and username else None
 
     def current_user(self, request: Request) -> str | None:
         user = request.cookies.get(_USER_COOKIE)
@@ -84,11 +132,23 @@ class JupyterHubServiceAuth:
                 },
             )
 
+        username = self._hub_authenticated_user(request)
+        if username is None:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={
+                    "error": {
+                        "code": "oauth_callback_failed",
+                        "message": "unable to resolve authenticated JupyterHub user",
+                    }
+                },
+            )
+
         redirect_target = request.cookies.get(_NEXT_COOKIE) or self._service_root
         response = RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
         response.delete_cookie(_STATE_COOKIE)
         response.delete_cookie(_NEXT_COOKIE)
-        response.set_cookie(_USER_COOKIE, "oauth-authenticated-user", httponly=True, samesite="lax")
+        response.set_cookie(_USER_COOKIE, username, httponly=True, samesite="lax")
         return response
 
 
