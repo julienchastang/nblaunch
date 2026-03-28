@@ -1,12 +1,7 @@
 # nblaunch docs
 
-This directory separates stable product docs from implementation workflow docs.
+This directory contains the active standalone docs for `nblaunch`.
 
-- `spec/`: the source of truth for requirements, test expectations, and open decisions.
-- `implementation/stages/`: staged execution docs used to deliver the implementation.
-- `implementation/roadmap.md`: high-level sequencing and milestones.
-- `implementation/status.md`: current progress snapshot.
+- `spec/`: requirements, behavior expectations, and open decisions for this repo.
 
-Use `spec/` first to understand what must be built; use `implementation/` to track how it is being delivered.
-
-Implementation-stage docs were authored before this service was extracted from a monorepo. References there to `services/nblaunch`, `docs/nblaunch`, `tests/smoke`, `tests/e2e`, or `jupyterhub/` are historical unless the file explicitly says they exist in this standalone repo.
+Start with `spec/` for project context and contracts.

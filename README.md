@@ -28,10 +28,10 @@ Runtime tuning:
 ## Local run
 
 1. Create and activate a virtual environment.
-2. Install dependencies:
+2. Install dev dependencies:
 
 ```bash
-pip install -r requirements.txt
+pip install -e .[dev]
 ```
 
 3. Start the service from the repo root:
@@ -107,7 +107,7 @@ Run the standalone repo test suite from the repo root:
 pytest
 ```
 
-This extracted repo currently includes unit and integration tests only. Historical references to `tests/smoke/`, `tests/e2e/`, or Hub-side files belong to the former monorepo and are not part of this standalone repository.
+This extracted repo currently includes unit and integration tests only. Live smoke or end-to-end validation against a real JupyterHub deployment is operational work outside this repository.
 
 ## Troubleshooting
 
