@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-import asyncio
-import importlib.util
 from pathlib import Path
-import sys
-from types import ModuleType, SimpleNamespace
 import time
 
 from fastapi import Request
@@ -12,30 +8,9 @@ from fastapi.testclient import TestClient
 
 from nblaunch.app import create_app
 from nblaunch.config import Settings
-from nblaunch.hubapi import resolve_user_root
+from nblaunch.hubapi import HubApiAuthorizationError, resolve_user_root
 from nblaunch.nbgallery import NotebookPayload
 from nblaunch.security import sign_message
-
-
-def _load_module(path: Path, name: str) -> ModuleType:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"failed to load module {path}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-ROOT = Path(__file__).resolve().parents[4]
-HUB_HOME_SUBPATH = _load_module(
-    ROOT / "jupyterhub" / "base" / "extraConfig" / "21-home-subpath.py",
-    "hub_home_subpath",
-)
-HUB_HOME_SUBPATH_API = _load_module(
-    ROOT / "jupyterhub" / "base" / "extraConfig" / "22-nblaunch-home-subpath-api.py",
-    "hub_home_subpath_api",
-)
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -75,40 +50,6 @@ def _valid_query(nb: str = "gallery/notebook", ts: int | None = None) -> dict[st
     }
 
 
-def test_pre_spawn_hook_sets_home_subpath_and_preserves_existing_hook() -> None:
-    calls: list[str] = []
-
-    async def _existing_hook(spawner: SimpleNamespace) -> None:
-        calls.append("existing")
-        spawner.extra_flag = "preserved"
-
-    spawner = SimpleNamespace(
-        user=SimpleNamespace(name="User.Name+Demo"),
-        volume_mounts=[
-            {"name": "home", "mountPath": "/home/jovyan"},
-            {"name": "shared", "mountPath": "/srv/shared"},
-        ],
-    )
-
-    hook = HUB_HOME_SUBPATH.make_nblaunch_pre_spawn_hook(_existing_hook)
-    asyncio.run(hook(spawner))
-
-    assert calls == ["existing"]
-    assert spawner.extra_flag == "preserved"
-    assert spawner.volume_mounts[0]["subPath"] == "users/user-name-demo"
-    assert "subPath" not in spawner.volume_mounts[1]
-
-
-def test_home_subpath_api_rejects_unauthorized_service() -> None:
-    response = HUB_HOME_SUBPATH_API.build_home_subpath_response(
-        requester_service_name="other-service",
-        username="alice",
-    )
-
-    assert response.status_code == 403
-    assert response.body["error"]["code"] == "forbidden"
-
-
 def test_launch_uses_hub_owned_home_subpath_mapping(tmp_path: Path) -> None:
     username = "User.Name+Demo"
     app = create_app(_settings(tmp_path))
@@ -125,11 +66,10 @@ def test_launch_uses_hub_owned_home_subpath_mapping(tmp_path: Path) -> None:
         _ = url
         _ = token
         _ = timeout_seconds
-        response = HUB_HOME_SUBPATH_API.build_home_subpath_response(
-            requester_service_name="nblaunch",
-            username=username,
-        )
-        return response.body
+        return {
+            "username": username,
+            "home_subpath": "users/user-name-demo",
+        }
 
     def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
         _ = request
@@ -153,6 +93,34 @@ def test_launch_uses_hub_owned_home_subpath_mapping(tmp_path: Path) -> None:
     expected_root = tmp_path / "users" / "user-name-demo"
     expected_file = expected_root / "nbgallery" / "gallery" / "notebook.ipynb"
     assert expected_file.read_bytes() == b"{}"
+
+
+def test_launch_surfaces_hub_authorization_failures(tmp_path: Path) -> None:
+    username = "alice"
+    app = create_app(_settings(tmp_path))
+    app.state.service_auth = _AuthenticatedServiceAuth(username)
+
+    def _fake_fetch(**_: object) -> NotebookPayload:
+        return NotebookPayload(
+            notebook_id="gallery/notebook",
+            content=b"{}",
+            content_type="application/x-ipynb+json",
+        )
+
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        _ = username
+        _ = settings
+        raise HubApiAuthorizationError("Hub API rejected nblaunch service authorization")
+
+    app.state.fetch_notebook = _fake_fetch
+    app.state.resolve_user_root = _resolve_user_root
+    client = TestClient(app)
+
+    response = client.get("/launch", params=_valid_query(), follow_redirects=False)
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "hub_home_lookup_forbidden"
 
 
 def test_launch_rejects_malformed_home_subpath_from_hub(tmp_path: Path) -> None:

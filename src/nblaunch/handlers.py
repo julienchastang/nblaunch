@@ -10,7 +10,7 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 
 from .config import Settings
-from .hubapi import HomeSubpathNotFoundError, HubApiError
+from .hubapi import HomeSubpathNotFoundError, HubApiAuthorizationError, HubApiError
 from .nbgallery import (
     GalleryContentTypeError,
     NotebookPayload,
@@ -150,6 +150,8 @@ async def launch(request: Request) -> Response:
         user_root = _resolve_user_root(request, settings, username)
     except HomeSubpathNotFoundError as exc:
         return _error_response(status.HTTP_404_NOT_FOUND, "missing_user_home_mapping", str(exc))
+    except HubApiAuthorizationError as exc:
+        return _error_response(status.HTTP_403_FORBIDDEN, "hub_home_lookup_forbidden", str(exc))
     except HubApiError as exc:
         return _error_response(status.HTTP_502_BAD_GATEWAY, "hub_home_lookup_failed", str(exc))
 
