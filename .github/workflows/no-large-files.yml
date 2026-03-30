@@ -1,0 +1,65 @@
+name: Reject large/binary files
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail on large files
+        env:
+          MAX_BYTES: "5242880"   # 5 MiB
+        run: |
+          set -euo pipefail
+
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.sha }}"
+
+          # List added/modified files in this PR
+          mapfile -t files < <(git diff --name-only --diff-filter=AM "$base" "$head")
+
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No added/modified files."
+            exit 0
+          fi
+
+          bad=0
+          for f in "${files[@]}"; do
+            [ -f "$f" ] || continue
+
+            size=$(wc -c <"$f")
+            if [ "$size" -gt "$MAX_BYTES" ]; then
+              echo "::error file=$f::File is $size bytes (max $MAX_BYTES)."
+              bad=1
+            fi
+          done
+
+          exit "$bad"
+
+      - name: Fail on likely-binary files
+        run: |
+          set -euo pipefail
+
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.sha }}"
+
+          mapfile -t files < <(git diff --name-only --diff-filter=AM "$base" "$head")
+
+          bad=0
+          for f in "${files[@]}"; do
+            [ -f "$f" ] || continue
+
+            # perl -0777 slurps file; exit 0 if a NUL byte (\x00) is present
+            if perl -0777 -ne 'exit(/\x00/ ? 0 : 1)' "$f"; then
+              echo "::error file=$f::Likely binary file (contains NUL byte)."
+              bad=1
+            fi
+          done
+
+          exit "$bad"
