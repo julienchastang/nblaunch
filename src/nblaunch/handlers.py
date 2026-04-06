@@ -10,7 +10,6 @@ from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
 
 from .config import Settings
-from .hubapi import HomeSubpathNotFoundError, HubApiAuthorizationError, HubApiError
 from .nbgallery import (
     GalleryContentTypeError,
     NotebookPayload,
@@ -19,7 +18,7 @@ from .nbgallery import (
     GalleryUpstreamError,
 )
 from .security import ValidationError, validate_launch_request
-from .storage import StorageError, StoredNotebook, planned_notebook_path
+from .storage import UserRootResolutionError, StorageError, StoredNotebook, planned_notebook_path
 
 
 logger = logging.getLogger(__name__)
@@ -97,7 +96,7 @@ def _app_state(request: Request) -> AppState:
 def _resolve_user_root(request: Request, settings: Settings, username: str) -> Path:
     resolver = _app_state(request).resolve_user_root
     if resolver is None:
-        raise HubApiError("user-root resolver is not configured")
+        raise UserRootResolutionError("user-root resolver is not configured")
     return Path(resolver(request=request, username=username, settings=settings))
 
 
@@ -148,12 +147,8 @@ async def launch(request: Request) -> Response:
 
     try:
         user_root = _resolve_user_root(request, settings, username)
-    except HomeSubpathNotFoundError as exc:
-        return _error_response(status.HTTP_404_NOT_FOUND, "missing_user_home_mapping", str(exc))
-    except HubApiAuthorizationError as exc:
-        return _error_response(status.HTTP_403_FORBIDDEN, "hub_home_lookup_forbidden", str(exc))
-    except HubApiError as exc:
-        return _error_response(status.HTTP_502_BAD_GATEWAY, "hub_home_lookup_failed", str(exc))
+    except UserRootResolutionError as exc:
+        return _error_response(status.HTTP_500_INTERNAL_SERVER_ERROR, "user_root_resolution_failed", str(exc))
 
     try:
         home_subpath = user_root.relative_to(settings.notebook_base_dir).as_posix()

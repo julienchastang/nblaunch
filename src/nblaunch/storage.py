@@ -12,6 +12,10 @@ class StorageError(RuntimeError):
     """Raised when notebook storage fails."""
 
 
+class UserRootResolutionError(StorageError):
+    """Raised when a username cannot be mapped to a storage path."""
+
+
 @dataclass(frozen=True)
 class StoredNotebook:
     absolute_path: Path
@@ -37,6 +41,16 @@ def _safe_home_subpath(home_subpath: str) -> Path:
 
 def resolve_user_root_from_home_subpath(*, base_dir: Path, home_subpath: str) -> Path:
     return base_dir / _safe_home_subpath(home_subpath)
+
+
+def resolve_user_root(*, notebook_base_dir: str | Path, username: str) -> Path:
+    try:
+        return resolve_user_root_from_home_subpath(
+            base_dir=Path(notebook_base_dir),
+            home_subpath=username,
+        )
+    except StorageError as exc:
+        raise UserRootResolutionError("invalid username for local storage resolution") from exc
 
 
 def _safe_notebook_relative_path(notebook_id: str) -> Path:

@@ -15,7 +15,7 @@ from fastapi import FastAPI, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from .config import Settings, load_settings
-from .hubapi import resolve_user_root as resolve_hub_user_root
+from .storage import resolve_user_root
 from .handlers import healthz, launch, oauth_callback_placeholder
 from .nbgallery import fetch_notebook
 from .storage import write_notebook
@@ -305,12 +305,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
         _ = request
-        return resolve_hub_user_root(
-            hub_api_url=settings.hub_api_url,
-            service_token=settings.service_token,
+        return resolve_user_root(
             notebook_base_dir=settings.notebook_base_dir,
             username=username,
-            timeout_seconds=settings.http_timeout_seconds,
         )
 
     app.state.settings = app_settings
