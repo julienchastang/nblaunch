@@ -4,7 +4,13 @@ from pathlib import Path
 
 import pytest
 
-from nblaunch.storage import StorageError, resolve_user_root_from_home_subpath, write_notebook
+from nblaunch.storage import (
+    StorageError,
+    UserRootResolutionError,
+    resolve_user_root,
+    resolve_user_root_from_home_subpath,
+    write_notebook,
+)
 
 
 def test_write_notebook_writes_under_expected_path(tmp_path: Path) -> None:
@@ -57,4 +63,21 @@ def test_resolve_user_root_from_home_subpath_rejects_traversal() -> None:
         _ = resolve_user_root_from_home_subpath(
             base_dir=Path("/tmp/notebooks"),
             home_subpath="../escape",
+        )
+
+
+def test_resolve_user_root_uses_username_under_base_dir(tmp_path: Path) -> None:
+    resolved = resolve_user_root(
+        notebook_base_dir=tmp_path,
+        username="test-user",
+    )
+
+    assert resolved == tmp_path / "test-user"
+
+
+def test_resolve_user_root_rejects_invalid_username() -> None:
+    with pytest.raises(UserRootResolutionError, match="invalid username"):
+        _ = resolve_user_root(
+            notebook_base_dir=Path("/tmp/notebooks"),
+            username="../escape",
         )

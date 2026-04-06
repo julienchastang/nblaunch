@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 
 from nblaunch.app import create_app
 from nblaunch.config import Settings
-from nblaunch.hubapi import HubApiAuthorizationError, resolve_user_root
 from nblaunch.nbgallery import NotebookPayload
 from nblaunch.security import sign_message
+from nblaunch.storage import UserRootResolutionError, resolve_user_root
 
 
 def _settings(tmp_path: Path) -> Settings:
@@ -50,7 +50,7 @@ def _valid_query(nb: str = "gallery/notebook", ts: int | None = None) -> dict[st
     }
 
 
-def test_launch_uses_hub_owned_home_subpath_mapping(tmp_path: Path) -> None:
+def test_launch_uses_local_username_for_user_root(tmp_path: Path) -> None:
     username = "User.Name+Demo"
     app = create_app(_settings(tmp_path))
     app.state.service_auth = _AuthenticatedServiceAuth(username)
@@ -62,24 +62,11 @@ def test_launch_uses_hub_owned_home_subpath_mapping(tmp_path: Path) -> None:
             content_type="application/x-ipynb+json",
         )
 
-    def _hub_fetch_json(*, url: str, token: str, timeout_seconds: int) -> object:
-        _ = url
-        _ = token
-        _ = timeout_seconds
-        return {
-            "username": username,
-            "home_subpath": "users/user-name-demo",
-        }
-
     def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
         _ = request
         return resolve_user_root(
-            hub_api_url=settings.hub_api_url,
-            service_token=settings.service_token,
             notebook_base_dir=settings.notebook_base_dir,
             username=username,
-            timeout_seconds=settings.http_timeout_seconds,
-            fetch_json=_hub_fetch_json,
         )
 
     app.state.fetch_notebook = _fake_fetch
@@ -90,12 +77,41 @@ def test_launch_uses_hub_owned_home_subpath_mapping(tmp_path: Path) -> None:
 
     assert response.status_code == 302
     assert response.headers["location"] == "/hub/user-redirect/lab/tree/nbgallery/gallery/notebook.ipynb"
-    expected_root = tmp_path / "users" / "user-name-demo"
+    expected_root = tmp_path / "User.Name+Demo"
     expected_file = expected_root / "nbgallery" / "gallery" / "notebook.ipynb"
     assert expected_file.read_bytes() == b"{}"
 
 
-def test_launch_surfaces_hub_authorization_failures(tmp_path: Path) -> None:
+def test_launch_returns_500_when_username_cannot_map_to_local_storage(tmp_path: Path) -> None:
+    username = "../escape"
+    app = create_app(_settings(tmp_path))
+    app.state.service_auth = _AuthenticatedServiceAuth(username)
+
+    def _fake_fetch(**_: object) -> NotebookPayload:
+        return NotebookPayload(
+            notebook_id="gallery/notebook",
+            content=b"{}",
+            content_type="application/x-ipynb+json",
+        )
+
+    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
+        _ = request
+        return resolve_user_root(
+            notebook_base_dir=settings.notebook_base_dir,
+            username=username,
+        )
+
+    app.state.fetch_notebook = _fake_fetch
+    app.state.resolve_user_root = _resolve_user_root
+    client = TestClient(app)
+
+    response = client.get("/launch", params=_valid_query(), follow_redirects=False)
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "user_root_resolution_failed"
+
+
+def test_launch_surfaces_explicit_user_root_resolution_errors(tmp_path: Path) -> None:
     username = "alice"
     app = create_app(_settings(tmp_path))
     app.state.service_auth = _AuthenticatedServiceAuth(username)
@@ -111,7 +127,7 @@ def test_launch_surfaces_hub_authorization_failures(tmp_path: Path) -> None:
         _ = request
         _ = username
         _ = settings
-        raise HubApiAuthorizationError("Hub API rejected nblaunch service authorization")
+        raise UserRootResolutionError("unable to resolve local user root")
 
     app.state.fetch_notebook = _fake_fetch
     app.state.resolve_user_root = _resolve_user_root
@@ -119,48 +135,5 @@ def test_launch_surfaces_hub_authorization_failures(tmp_path: Path) -> None:
 
     response = client.get("/launch", params=_valid_query(), follow_redirects=False)
 
-    assert response.status_code == 403
-    assert response.json()["error"]["code"] == "hub_home_lookup_forbidden"
-
-
-def test_launch_rejects_malformed_home_subpath_from_hub(tmp_path: Path) -> None:
-    username = "alice"
-    app = create_app(_settings(tmp_path))
-    app.state.service_auth = _AuthenticatedServiceAuth(username)
-
-    def _fake_fetch(**_: object) -> NotebookPayload:
-        return NotebookPayload(
-            notebook_id="gallery/notebook",
-            content=b"{}",
-            content_type="application/x-ipynb+json",
-        )
-
-    def _resolve_user_root(*, request: Request, username: str, settings: Settings) -> Path:
-        _ = request
-
-        def _invalid_fetch_json(*, url: str, token: str, timeout_seconds: int) -> object:
-            _ = url
-            _ = token
-            _ = timeout_seconds
-            return {
-                "username": username,
-                "home_subpath": "../escape",
-            }
-
-        return resolve_user_root(
-            hub_api_url=settings.hub_api_url,
-            service_token=settings.service_token,
-            notebook_base_dir=settings.notebook_base_dir,
-            username=username,
-            timeout_seconds=settings.http_timeout_seconds,
-            fetch_json=_invalid_fetch_json,
-        )
-
-    app.state.fetch_notebook = _fake_fetch
-    app.state.resolve_user_root = _resolve_user_root
-    client = TestClient(app)
-
-    response = client.get("/launch", params=_valid_query(), follow_redirects=False)
-
-    assert response.status_code == 502
-    assert response.json()["error"]["code"] == "hub_home_lookup_failed"
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "user_root_resolution_failed"
